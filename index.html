@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NestingApp — Optimización de corte láser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- SheetJS para Excel y CSV -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <!-- jsPDF para exportar PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+  <header class="app-header">
+    <img src="assets/logogif.gif" alt="Creality Falcon Nesting" class="app-logo">
+  </header>
+
+  <main class="layout">
+
+    <!-- ===================== PANEL IZQUIERDO ===================== -->
+    <section class="panel panel-izquierdo">
+
+      <!-- 1. Configuración de plancha -->
+      <fieldset class="bloque">
+        <legend>Configuración de plancha</legend>
+        <div class="campo-grupo">
+          <label for="plancha-ancho">Ancho de plancha (mm)</label>
+          <input type="number" id="plancha-ancho" min="1" step="1" value="1220" inputmode="numeric">
+        </div>
+        <div class="campo-grupo">
+          <label for="plancha-alto">Alto de plancha (mm)</label>
+          <input type="number" id="plancha-alto" min="1" step="1" value="2440" inputmode="numeric">
+        </div>
+        <div class="campo-grupo">
+          <label for="plancha-kerf">Kerf / sangría (mm)</label>
+          <input type="number" id="plancha-kerf" min="0" step="0.01" value="0.2" inputmode="decimal">
+          <p class="texto-ayuda">Espacio entre piezas por el grosor del corte láser. Típico: 0.1–0.3mm</p>
+        </div>
+      </fieldset>
+
+      <!-- 2. Importar archivo -->
+      <fieldset class="bloque">
+        <legend>Importar archivo</legend>
+        <input type="file" id="input-archivo" accept=".csv,.xlsx,.xls,.svg,.dxf" class="input-archivo-oculto">
+        <button type="button" id="btn-importar" class="btn btn-secundario btn-block">Seleccionar archivo</button>
+        <p class="texto-ayuda">Formatos soportados: CSV, Excel (.xlsx/.xls), SVG, DXF.</p>
+        <p id="nombre-archivo" class="texto-ayuda texto-ayuda--archivo"></p>
+      </fieldset>
+
+      <!-- 3. Agregar pieza manualmente -->
+      <fieldset class="bloque">
+        <legend>Agregar pieza</legend>
+        <form id="form-pieza" autocomplete="off">
+          <div class="campo-grupo">
+            <label for="pieza-nombre">Nombre de pieza</label>
+            <input type="text" id="pieza-nombre" placeholder="Ej: Lateral A">
+          </div>
+          <div class="campo-grupo campo-grupo--doble">
+            <div>
+              <label for="pieza-cantidad">Cantidad</label>
+              <input type="number" id="pieza-cantidad" min="1" step="1" value="1" inputmode="numeric">
+            </div>
+            <div>
+              <label for="pieza-material">Material (opcional)</label>
+              <input type="text" id="pieza-material" placeholder="Ej: MDF 9mm">
+            </div>
+          </div>
+          <div class="campo-grupo campo-grupo--doble">
+            <div>
+              <label for="pieza-ancho">Ancho (mm)</label>
+              <input type="number" id="pieza-ancho" min="0.1" step="0.1" inputmode="decimal">
+            </div>
+            <div>
+              <label for="pieza-alto">Alto (mm)</label>
+              <input type="number" id="pieza-alto" min="0.1" step="0.1" inputmode="decimal">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-acento btn-block">Agregar pieza</button>
+        </form>
+      </fieldset>
+
+      <!-- 4. Lista de piezas cargadas -->
+      <fieldset class="bloque bloque-piezas">
+        <legend>Piezas cargadas</legend>
+        <div class="tabla-piezas-wrap">
+          <table class="tabla-piezas">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Cant.</th>
+                <th>Medidas</th>
+                <th>Material</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="lista-piezas">
+              <!-- filas generadas dinámicamente -->
+            </tbody>
+          </table>
+          <p id="piezas-vacio" class="texto-vacio">No hay piezas cargadas todavía.</p>
+        </div>
+        <div class="contador-piezas">
+          Total de piezas: <span id="contador-total" class="mono">0</span>
+        </div>
+      </fieldset>
+
+      <!-- 5. Acciones principales -->
+      <div class="bloque acciones-principales">
+        <button id="btn-calcular" class="btn btn-acento btn-grande btn-block">Calcular nesting</button>
+        <button id="btn-limpiar" class="btn btn-secundario btn-block">Limpiar todo</button>
+      </div>
+
+      <!-- 6. Área de mensajes -->
+      <div class="bloque">
+        <div id="area-mensajes" class="area-mensajes" role="status" aria-live="polite">
+          <p class="texto-vacio">Sin mensajes.</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===================== PANEL DERECHO ===================== -->
+    <section class="panel panel-derecho">
+      <div id="seccion-exportar" class="bloque seccion-exportar oculto">
+        <span class="exportar-titulo">Exportar</span>
+        <div class="exportar-acciones">
+          <button type="button" id="btn-exportar-svg" class="btn btn-acento">SVG</button>
+          <button type="button" id="btn-exportar-dxf" class="btn btn-secundario">DXF</button>
+          <button type="button" id="btn-exportar-pdf" class="btn btn-secundario">PDF</button>
+          <button type="button" id="btn-exportar-excel" class="btn btn-secundario">Excel</button>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="canvas-nesting"></canvas>
+        <p id="canvas-placeholder" class="canvas-placeholder">Cargá tus piezas y presioná Calcular</p>
+        <div id="canvas-indicadores" class="canvas-indicadores oculto">
+          <div class="indicador">
+            <span class="indicador-label">Aprovechamiento</span>
+            <span class="indicador-valor mono" id="ind-aprovechamiento">0%</span>
+          </div>
+          <div class="indicador">
+            <span class="indicador-label">Piezas ubicadas</span>
+            <span class="indicador-valor mono" id="ind-piezas">0/0</span>
+          </div>
+          <div class="indicador">
+            <span class="indicador-label">Planchas usadas</span>
+            <span class="indicador-valor mono" id="ind-planchas">0</span>
+          </div>
+          <div class="indicador">
+            <span class="indicador-label">Área usada/total (cm²)</span>
+            <span class="indicador-valor mono" id="ind-area">0 / 0</span>
+          </div>
+        </div>
+      </div>
+      <div id="piezas-no-ubicadas" class="aviso-no-ubicadas oculto"></div>
+    </section>
+
+  </main>
+
+  <!-- ===================== Botón flotante de ayuda ===================== -->
+  <button type="button" id="btn-ayuda" class="btn-ayuda" aria-haspopup="dialog" aria-label="Ayuda">?</button>
+
+  <!-- ===================== Modal de ayuda ===================== -->
+  <div id="modal-ayuda" class="modal-overlay oculto">
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-ayuda-titulo">
+      <button type="button" id="btn-cerrar-ayuda" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+      <h2 id="modal-ayuda-titulo">Cómo usar esta app</h2>
+
+      <h3>Qué hace esta app</h3>
+      <p>Tomás una lista de piezas rectangulares y la app las acomoda automáticamente dentro de tus planchas para desperdiciar lo menos posible. Te muestra el resultado en pantalla y te da el archivo listo para mandar a la Falcon.</p>
+      <p>Podés cargar las piezas de tres formas: a mano desde el formulario, importando un Excel o CSV, o importando un DXF exportado directamente desde AutoCAD.</p>
+      <p>El resultado lo exportás como SVG (directo a la Falcon o LightBurn), DXF, PDF o Excel.</p>
+
+      <h3>Cómo usarla</h3>
+      <ol>
+        <li>Poné el tamaño de tu plancha real en mm.</li>
+        <li>Ajustá el kerf: el espacio entre piezas por el grosor del corte láser. Para la Falcon con madera o acrílico, 0.2mm es un buen punto de partida. Si las piezas quedan muy justas, subilo a 0.3mm.</li>
+        <li>Cargá todas las piezas del trabajo junto antes de calcular — cuanta más variedad de tamaños, mejor llena los huecos el algoritmo.</li>
+        <li>Presioná Calcular y revisá el canvas y el % de aprovechamiento.</li>
+        <li>Exportá el SVG y abrilo en LightBurn o Falcon Design Space.</li>
+      </ol>
+
+      <h3>Qué NO hace</h3>
+      <ul>
+        <li>No maneja formas irregulares. Solo trabaja con rectángulos. Si una pieza tiene un corte diagonal, curva o hueco interno, la app la trata como el rectángulo más grande que la contiene — reserva más espacio del necesario pero el corte en sí sale bien.</li>
+        <li>No importa DWG, RVT ni PDF. El único formato de entrada CAD es DXF exportado desde AutoCAD.</li>
+        <li>No guarda proyectos. Si cerrás el navegador, perdés lo cargado.</li>
+      </ul>
+
+      <h3>Piezas triangulares o con ángulos</h3>
+      <p>La app lee el bounding box de la forma — el rectángulo más chico que la contiene — y usa ese espacio en la plancha. El SVG exportado tiene la posición correcta y el corte sale bien, pero el algoritmo no puede meter piezas en el espacio vacío que queda al lado de una forma diagonal. Esto significa menos aprovechamiento del que se podría lograr con formas irregulares reales. Si la mayoría de tus piezas son rectangulares con alguna irregular suelta, el impacto es menor.</p>
+
+      <h3>Qué falta para una versión futura</h3>
+      <ul>
+        <li>Guardado de proyectos</li>
+        <li>Nesting de formas irregulares reales (triángulos, trapecios, piezas con huecos)</li>
+        <li>Margen de plancha configurable</li>
+        <li>Multiplicar un trabajo completo para repetir el mismo corte varias veces</li>
+      </ul>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
