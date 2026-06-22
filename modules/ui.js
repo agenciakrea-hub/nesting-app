@@ -29,14 +29,21 @@ function cachearRefs() {
 
   refs.areaMensajes = document.getElementById('area-mensajes');
 
+  refs.canvasWrap = document.getElementById('canvas-wrap');
   refs.canvas = document.getElementById('canvas-nesting');
   refs.canvasPlaceholder = document.getElementById('canvas-placeholder');
   refs.canvasIndicadores = document.getElementById('canvas-indicadores');
+  refs.canvasControles = document.getElementById('canvas-controles');
+  refs.btnZoomIn = document.getElementById('btn-zoom-in');
+  refs.btnZoomOut = document.getElementById('btn-zoom-out');
+  refs.btnZoomReset = document.getElementById('btn-zoom-reset');
+  refs.btnPantallaCompleta = document.getElementById('btn-pantalla-completa');
   refs.indAprovechamiento = document.getElementById('ind-aprovechamiento');
   refs.indPiezas = document.getElementById('ind-piezas');
   refs.indPlanchas = document.getElementById('ind-planchas');
   refs.indArea = document.getElementById('ind-area');
   refs.piezasNoUbicadas = document.getElementById('piezas-no-ubicadas');
+  refs.appHeader = document.getElementById('app-header');
 
   refs.seccionExportar = document.getElementById('seccion-exportar');
   refs.btnExportarSVG = document.getElementById('btn-exportar-svg');
@@ -283,15 +290,15 @@ function dibujarPieza(ctx, pieza, offsetXPlancha, offsetYPlancha, factor) {
 }
 
 /**
- * Dibuja el resultado de calcularNesting(): una o varias planchas apiladas
- * verticalmente, cada una con sus piezas ubicadas a escala.
+ * Dibuja todas las planchas de un resultado de nesting (sin zoom/pan, ya
+ * aplicado por quien llama vía la transformación del contexto).
+ * @param {CanvasRenderingContext2D} ctx
  * @param {{ubicadas: Array, noUbicadas: Array, totalPlanchas: number}} resultado
  * @param {{ancho: number, alto: number}} plancha
+ * @param {number} anchoCss
+ * @param {number} altoCss
  */
-export function renderizarNesting(resultado, plancha) {
-  const { ctx, anchoCss, altoCss } = prepararContexto(refs.canvas);
-  ctx.clearRect(0, 0, anchoCss, altoCss);
-
+function dibujarPlanchas(ctx, resultado, plancha, anchoCss, altoCss) {
   const totalPlanchas = Math.max(resultado.totalPlanchas, 1);
   const gap = 16;
 
@@ -332,6 +339,155 @@ export function renderizarNesting(resultado, plancha) {
   }
 }
 
+// ===================== Canvas: zoom y desplazamiento =====================
+
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 12;
+
+let ultimoResultado = null;
+let ultimaPlancha = null;
+let zoomActual = 1;
+let panX = 0;
+let panY = 0;
+let arrastrando = false;
+let arrastreInicio = { x: 0, y: 0 };
+let panAlIniciarArrastre = { x: 0, y: 0 };
+
+/**
+ * Vuelve a dibujar el último resultado de nesting aplicando el zoom y
+ * desplazamiento (pan) actuales sobre el dibujo ya ajustado a la plancha.
+ */
+function dibujarNestingConTransform() {
+  if (!ultimoResultado || !ultimaPlancha) return;
+  const { ctx, anchoCss, altoCss } = prepararContexto(refs.canvas);
+  ctx.clearRect(0, 0, anchoCss, altoCss);
+  ctx.save();
+  ctx.translate(panX, panY);
+  ctx.scale(zoomActual, zoomActual);
+  dibujarPlanchas(ctx, ultimoResultado, ultimaPlancha, anchoCss, altoCss);
+  ctx.restore();
+}
+
+/**
+ * Acerca o aleja manteniendo fijo el punto del canvas bajo (mouseX, mouseY).
+ * @param {number} factor - multiplicador de zoom (>1 acerca, <1 aleja)
+ * @param {number} mouseX - posición X relativa al canvas en píxeles CSS
+ * @param {number} mouseY - posición Y relativa al canvas en píxeles CSS
+ */
+function aplicarZoom(factor, mouseX, mouseY) {
+  if (!ultimoResultado) return;
+  const nuevoZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomActual * factor));
+  const factorReal = nuevoZoom / zoomActual;
+  panX = mouseX - (mouseX - panX) * factorReal;
+  panY = mouseY - (mouseY - panY) * factorReal;
+  zoomActual = nuevoZoom;
+  dibujarNestingConTransform();
+}
+
+function centroCanvas() {
+  const rect = refs.canvas.getBoundingClientRect();
+  return { x: rect.width / 2, y: rect.height / 2 };
+}
+
+function reiniciarZoomYPan() {
+  zoomActual = 1;
+  panX = 0;
+  panY = 0;
+}
+
+/**
+ * Inicializa los listeners de zoom (rueda), desplazamiento (arrastre),
+ * reset, y pantalla completa sobre el canvas de nesting.
+ */
+function inicializarInteraccionCanvas() {
+  refs.canvas.addEventListener('wheel', (ev) => {
+    if (!ultimoResultado) return;
+    ev.preventDefault();
+    const rect = refs.canvas.getBoundingClientRect();
+    const mouseX = ev.clientX - rect.left;
+    const mouseY = ev.clientY - rect.top;
+    const factor = ev.deltaY < 0 ? 1.12 : 1 / 1.12;
+    aplicarZoom(factor, mouseX, mouseY);
+  }, { passive: false });
+
+  refs.canvas.addEventListener('mousedown', (ev) => {
+    if (!ultimoResultado) return;
+    ev.preventDefault();
+    arrastrando = true;
+    arrastreInicio = { x: ev.clientX, y: ev.clientY };
+    panAlIniciarArrastre = { x: panX, y: panY };
+    refs.canvas.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mousemove', (ev) => {
+    if (!arrastrando) return;
+    panX = panAlIniciarArrastre.x + (ev.clientX - arrastreInicio.x);
+    panY = panAlIniciarArrastre.y + (ev.clientY - arrastreInicio.y);
+    dibujarNestingConTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    refs.canvas.style.cursor = ultimoResultado ? 'grab' : 'default';
+  });
+
+  refs.canvas.addEventListener('dblclick', () => {
+    if (!ultimoResultado) return;
+    reiniciarZoomYPan();
+    dibujarNestingConTransform();
+  });
+
+  refs.btnZoomIn.addEventListener('click', () => {
+    const c = centroCanvas();
+    aplicarZoom(1.25, c.x, c.y);
+  });
+
+  refs.btnZoomOut.addEventListener('click', () => {
+    const c = centroCanvas();
+    aplicarZoom(1 / 1.25, c.x, c.y);
+  });
+
+  refs.btnZoomReset.addEventListener('click', () => {
+    if (!ultimoResultado) return;
+    reiniciarZoomYPan();
+    dibujarNestingConTransform();
+  });
+
+  refs.btnPantallaCompleta.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      refs.canvasWrap.requestFullscreen?.().catch(() => {
+        mostrarMensaje('No se pudo activar pantalla completa en este navegador.', 'error');
+      });
+    } else {
+      document.exitFullscreen?.();
+    }
+  });
+
+  document.addEventListener('fullscreenchange', () => {
+    if (ultimoResultado) {
+      dibujarNestingConTransform();
+    } else {
+      dibujarGrillaVacia();
+    }
+  });
+}
+
+/**
+ * Dibuja el resultado de calcularNesting(): una o varias planchas apiladas
+ * verticalmente, cada una con sus piezas ubicadas a escala. Reinicia el
+ * zoom/pan a su estado inicial (ajustado a la plancha) en cada cálculo nuevo.
+ * @param {{ubicadas: Array, noUbicadas: Array, totalPlanchas: number}} resultado
+ * @param {{ancho: number, alto: number}} plancha
+ */
+export function renderizarNesting(resultado, plancha) {
+  ultimoResultado = resultado;
+  ultimaPlancha = plancha;
+  reiniciarZoomYPan();
+  refs.canvas.style.cursor = 'grab';
+  dibujarNestingConTransform();
+}
+
 /**
  * Actualiza los indicadores numéricos sobre el canvas (aprovechamiento,
  * piezas ubicadas, planchas usadas, área usada/total) y los hace visibles.
@@ -341,6 +497,7 @@ export function renderizarNesting(resultado, plancha) {
 export function actualizarIndicadoresNesting(estadisticas, totalPiezasOriginal) {
   refs.canvasPlaceholder.style.display = 'none';
   refs.canvasIndicadores.classList.remove('oculto');
+  refs.appHeader.classList.add('oculto');
 
   refs.indAprovechamiento.textContent = `${estadisticas.aprovechamiento}%`;
   refs.indPiezas.textContent = `${estadisticas.piezasUbicadas}/${totalPiezasOriginal}`;
@@ -376,6 +533,11 @@ export function reiniciarCanvas() {
   refs.piezasNoUbicadas.classList.add('oculto');
   refs.piezasNoUbicadas.innerHTML = '';
   refs.seccionExportar.classList.add('oculto');
+  refs.appHeader.classList.remove('oculto');
+  ultimoResultado = null;
+  ultimaPlancha = null;
+  reiniciarZoomYPan();
+  refs.canvas.style.cursor = 'default';
   dibujarGrillaVacia();
 }
 
@@ -454,6 +616,8 @@ export function inicializarUI(callbacks) {
   refs.modalAyuda.addEventListener('click', (ev) => {
     if (ev.target === refs.modalAyuda) cerrarModalAyuda();
   });
+
+  inicializarInteraccionCanvas();
 
   reiniciarCanvas();
   mostrarMensaje('Listo para cargar piezas.', 'info');

@@ -15,10 +15,6 @@
 </head>
 <body>
 
-  <header class="app-header">
-    <img src="assets/logogif.gif" alt="Creality Falcon Nesting" class="app-logo">
-  </header>
-
   <main class="layout">
 
     <!-- ===================== PANEL IZQUIERDO ===================== -->
@@ -134,7 +130,10 @@
           <button type="button" id="btn-exportar-excel" class="btn btn-secundario">Excel</button>
         </div>
       </div>
-      <div class="canvas-wrap">
+      <div id="canvas-wrap" class="canvas-wrap">
+        <header id="app-header" class="app-header">
+          <img src="assets/logogif.gif" alt="Creality Falcon Nesting" class="app-logo">
+        </header>
         <canvas id="canvas-nesting"></canvas>
         <p id="canvas-placeholder" class="canvas-placeholder">Cargá tus piezas y presioná Calcular</p>
         <div id="canvas-indicadores" class="canvas-indicadores oculto">
@@ -154,6 +153,12 @@
             <span class="indicador-label">Área usada/total (cm²)</span>
             <span class="indicador-valor mono" id="ind-area">0 / 0</span>
           </div>
+        </div>
+        <div id="canvas-controles" class="canvas-controles">
+          <button type="button" id="btn-zoom-in" class="btn-control-canvas" aria-label="Acercar">+</button>
+          <button type="button" id="btn-zoom-out" class="btn-control-canvas" aria-label="Alejar">&minus;</button>
+          <button type="button" id="btn-zoom-reset" class="btn-control-canvas" aria-label="Restablecer zoom" title="Restablecer zoom">&#10226;</button>
+          <button type="button" id="btn-pantalla-completa" class="btn-control-canvas" aria-label="Pantalla completa" title="Pantalla completa">&#9974;</button>
         </div>
       </div>
       <div id="piezas-no-ubicadas" class="aviso-no-ubicadas oculto"></div>
