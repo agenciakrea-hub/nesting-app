@@ -1,6 +1,10 @@
-// nesting.js — Motor de bin packing (FFDH con estantes y rotación 90°).
+// nesting.js — Motor de bin packing (Guillotine con best-fit y rotación 90°).
 // Módulo puro: solo recibe arrays/objetos y devuelve arrays/objetos.
 // Cero DOM, cero window, cero console.log.
+
+// Tolerancia para descartar espacios libres degenerados (ancho/alto ~0)
+// que pueden aparecer por errores de redondeo al cortar rectángulos.
+const EPS = 0.001;
 
 /**
  * Expande las piezas según su cantidad en instancias individuales a ubicar.
@@ -18,56 +22,117 @@ function expandirInstancias(piezas) {
 }
 
 /**
- * Ordena las instancias de mayor a menor según el lado más largo (altura
- * efectiva pensando en que la pieza puede rotarse). Si dos instancias tienen
- * la misma altura efectiva, desempata por el lado restante descendente.
+ * Ordena las instancias de mayor a menor área (ancho × alto): las piezas
+ * más grandes se ubican primero y las más chicas van rellenando los huecos
+ * que van quedando. Empata por el lado más largo descendente.
  * @param {Array} instancias
  */
 function ordenarInstancias(instancias) {
   instancias.sort((a, b) => {
+    const areaA = a.ancho * a.alto;
+    const areaB = b.ancho * b.alto;
+    if (areaB !== areaA) return areaB - areaA;
     const altA = Math.max(a.ancho, a.alto);
     const altB = Math.max(b.ancho, b.alto);
-    if (altB !== altA) return altB - altA;
-    const restoA = Math.min(a.ancho, a.alto);
-    const restoB = Math.min(b.ancho, b.alto);
-    return restoB - restoA;
+    return altB - altA;
   });
 }
 
 /**
- * Decide si una instancia entra en un estante existente, en orientación
- * normal o rotada. Prefiere la orientación normal si ambas entran.
- * El kerf se suma al ancho ocupado (espacio que reserva la pieza más el
- * corte láser); la altura se compara contra la altura real del estante,
- * que ya quedó fijada por la primera pieza que lo abrió.
+ * Decide si una instancia entra en un espacio libre rectangular, en
+ * orientación normal o rotada (prefiere normal si ambas entran). El kerf
+ * se suma como margen reservado en ambas dimensiones.
  * @returns {'normal'|'rotada'|null}
  */
-function elegirOrientacionParaEstante(estante, inst, anchoPlancha, kerf) {
-  const cabeNormal = estante.xActual + inst.ancho + kerf <= anchoPlancha && inst.alto <= estante.alturaMaxima;
+function elegirOrientacionParaEspacio(espacio, inst, kerf) {
+  const cabeNormal = inst.ancho + kerf <= espacio.ancho && inst.alto + kerf <= espacio.alto;
   if (cabeNormal) return 'normal';
-  const cabeRotada = estante.xActual + inst.alto + kerf <= anchoPlancha && inst.ancho <= estante.alturaMaxima;
+  const cabeRotada = inst.alto + kerf <= espacio.ancho && inst.ancho + kerf <= espacio.alto;
   if (cabeRotada) return 'rotada';
   return null;
 }
 
 /**
- * Decide la orientación para abrir un estante nuevo, dado el espacio
- * vertical disponible en la plancha actual. El kerf se suma tanto al
- * ancho como al alto efectivos de la pieza.
- * @returns {'normal'|'rotada'|null}
+ * Busca, entre todos los espacios libres de todas las planchas ya abiertas,
+ * el más chico (por área) donde la instancia entre — best fit. Permite que
+ * una pieza chica vuelva a una plancha anterior si ahí quedó lugar.
+ * @param {Array<Array<{x:number,y:number,ancho:number,alto:number}>>} espaciosPorPlancha
+ * @param {{ancho:number, alto:number}} inst
+ * @param {number} kerf
+ * @returns {{planchaIndex: number, espacioIndex: number, orientacion: 'normal'|'rotada'}|null}
  */
-function elegirOrientacionNuevoEstante(inst, anchoPlancha, espacioVerticalDisponible, kerf) {
-  const cabeNormal = inst.ancho + kerf <= anchoPlancha && inst.alto + kerf <= espacioVerticalDisponible;
-  if (cabeNormal) return 'normal';
-  const cabeRotada = inst.alto + kerf <= anchoPlancha && inst.ancho + kerf <= espacioVerticalDisponible;
-  if (cabeRotada) return 'rotada';
-  return null;
+function buscarMejorEspacio(espaciosPorPlancha, inst, kerf) {
+  let mejor = null;
+  let mejorArea = Infinity;
+
+  for (let p = 0; p < espaciosPorPlancha.length; p++) {
+    const espacios = espaciosPorPlancha[p];
+    for (let e = 0; e < espacios.length; e++) {
+      const espacio = espacios[e];
+      const orientacion = elegirOrientacionParaEspacio(espacio, inst, kerf);
+      if (!orientacion) continue;
+
+      const area = espacio.ancho * espacio.alto;
+      if (area < mejorArea) {
+        mejorArea = area;
+        mejor = { planchaIndex: p, espacioIndex: e, orientacion };
+      }
+    }
+  }
+
+  return mejor;
+}
+
+/**
+ * Ubica una instancia dentro del espacio libre indicado y aplica el corte
+ * guillotine: el espacio usado se reemplaza por dos espacios nuevos, uno a
+ * la derecha de la pieza (alto limitado a la pieza) y uno abajo que ocupa
+ * todo el ancho original del espacio. Esto hace que el espacio libre se
+ * acumule siempre hacia abajo de la plancha en vez de quedar disperso.
+ * @param {Array<Array<object>>} espaciosPorPlancha
+ * @param {{planchaIndex: number, espacioIndex: number, orientacion: string}} ubicacion
+ * @param {object} inst
+ * @param {number} kerf
+ * @param {Array} ubicadas
+ */
+function colocarEnEspacio(espaciosPorPlancha, ubicacion, inst, kerf, ubicadas) {
+  const { planchaIndex, espacioIndex, orientacion } = ubicacion;
+  const espacios = espaciosPorPlancha[planchaIndex];
+  const espacio = espacios[espacioIndex];
+
+  const rotada = orientacion === 'rotada';
+  const ancho = rotada ? inst.alto : inst.ancho;
+  const alto = rotada ? inst.ancho : inst.alto;
+
+  ubicadas.push({
+    plancha: planchaIndex,
+    piezaId: inst.piezaId,
+    nombre: inst.nombre,
+    x: espacio.x,
+    y: espacio.y,
+    ancho,
+    alto,
+    rotada
+  });
+
+  espacios.splice(espacioIndex, 1);
+
+  const anchoDerecha = espacio.ancho - ancho - kerf;
+  const altoDerecha = alto + kerf;
+  if (anchoDerecha > EPS && altoDerecha > EPS) {
+    espacios.push({ x: espacio.x + ancho + kerf, y: espacio.y, ancho: anchoDerecha, alto: altoDerecha });
+  }
+
+  const altoAbajo = espacio.alto - alto - kerf;
+  if (altoAbajo > EPS && espacio.ancho > EPS) {
+    espacios.push({ x: espacio.x, y: espacio.y + alto + kerf, ancho: espacio.ancho, alto: altoAbajo });
+  }
 }
 
 /**
  * Ubica todas las piezas de una lista de piezas (con cantidad) dentro de
- * planchas del tamaño indicado, usando First Fit Decreasing Height con
- * estantes y rotación de 90° cuando ayuda.
+ * planchas del tamaño indicado, usando Guillotine Bin Packing con best-fit
+ * y rotación de 90° cuando ayuda.
  * @param {Array} piezas - modelo estándar {id, nombre, cantidad, ancho, alto, material}
  * @param {{ancho: number, alto: number}} plancha
  * @param {number} [kerf=0] - sangría de corte láser en mm; se reserva entre
@@ -86,32 +151,11 @@ export function calcularNesting(piezas, plancha, kerf = 0) {
 
   const ubicadas = [];
   const noUbicadas = [];
+  const espaciosPorPlancha = [];
 
-  let planchaIndex = 0;
-  let estantes = [];
-  let yUsada = 0;
-
-  function colocarEnEstante(estante, inst, orientacion) {
-    const rotada = orientacion === 'rotada';
-    const anchoFinal = rotada ? inst.alto : inst.ancho;
-    const altoFinal = rotada ? inst.ancho : inst.alto;
-    ubicadas.push({
-      plancha: planchaIndex,
-      piezaId: inst.piezaId,
-      nombre: inst.nombre,
-      x: estante.xActual,
-      y: estante.y,
-      ancho: anchoFinal,
-      alto: altoFinal,
-      rotada
-    });
-    estante.xActual += anchoFinal + kerfEfectivo;
-  }
-
-  function abrirEstante(y, alturaMaxima) {
-    const estante = { y, alturaMaxima, xActual: 0 };
-    estantes.push(estante);
-    return estante;
+  function abrirPlanchaNueva() {
+    espaciosPorPlancha.push([{ x: 0, y: 0, ancho: plancha.ancho, alto: plancha.alto }]);
+    return espaciosPorPlancha.length - 1;
   }
 
   instancias.forEach(inst => {
@@ -123,40 +167,41 @@ export function calcularNesting(piezas, plancha, kerf = 0) {
       return;
     }
 
-    // 1. Probar en los estantes existentes de la plancha actual.
-    for (const estante of estantes) {
-      const orientacion = elegirOrientacionParaEstante(estante, inst, plancha.ancho, kerfEfectivo);
-      if (orientacion) {
-        colocarEnEstante(estante, inst, orientacion);
-        return;
-      }
-    }
-
-    // 2. Probar abrir un estante nuevo en la plancha actual.
-    let orientacion = elegirOrientacionNuevoEstante(inst, plancha.ancho, plancha.alto - yUsada, kerfEfectivo);
-    if (orientacion) {
-      const alturaReal = orientacion === 'rotada' ? inst.ancho : inst.alto;
-      const estante = abrirEstante(yUsada, alturaReal);
-      yUsada += alturaReal + kerfEfectivo;
-      colocarEnEstante(estante, inst, orientacion);
+    // 1. Buscar el espacio libre más chico (best fit) entre todas las
+    // planchas ya abiertas, para rellenar huecos antes de abrir una nueva.
+    const mejor = buscarMejorEspacio(espaciosPorPlancha, inst, kerfEfectivo);
+    if (mejor) {
+      colocarEnEspacio(espaciosPorPlancha, mejor, inst, kerfEfectivo, ubicadas);
       return;
     }
 
-    // 3. No entra en la plancha actual: abrir una plancha nueva.
-    planchaIndex++;
-    estantes = [];
-    yUsada = 0;
-    orientacion = elegirOrientacionNuevoEstante(inst, plancha.ancho, plancha.alto, kerfEfectivo);
-    const alturaReal = orientacion === 'rotada' ? inst.ancho : inst.alto;
-    const estante = abrirEstante(0, alturaReal);
-    yUsada = alturaReal + kerfEfectivo;
-    colocarEnEstante(estante, inst, orientacion);
+    // 2. No entra en ninguna plancha existente: abrir una nueva, si el kerf
+    // no hace que la pieza deje de entrar en una plancha vacía.
+    const entraEnPlanchaVacia =
+      (inst.ancho + kerfEfectivo <= plancha.ancho && inst.alto + kerfEfectivo <= plancha.alto) ||
+      (inst.alto + kerfEfectivo <= plancha.ancho && inst.ancho + kerfEfectivo <= plancha.alto);
+
+    if (!entraEnPlanchaVacia) {
+      noUbicadas.push({ piezaId: inst.piezaId, nombre: inst.nombre, ancho: inst.ancho, alto: inst.alto });
+      return;
+    }
+
+    const nuevoIndex = abrirPlanchaNueva();
+    const espacioInicial = espaciosPorPlancha[nuevoIndex][0];
+    const orientacion = elegirOrientacionParaEspacio(espacioInicial, inst, kerfEfectivo);
+    colocarEnEspacio(
+      espaciosPorPlancha,
+      { planchaIndex: nuevoIndex, espacioIndex: 0, orientacion },
+      inst,
+      kerfEfectivo,
+      ubicadas
+    );
   });
 
   return {
     ubicadas,
     noUbicadas,
-    totalPlanchas: ubicadas.length > 0 ? planchaIndex + 1 : 0
+    totalPlanchas: ubicadas.length > 0 ? espaciosPorPlancha.length : 0
   };
 }
 

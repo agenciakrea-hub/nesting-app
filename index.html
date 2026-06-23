@@ -12,6 +12,17 @@
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <!-- jsPDF para exportar PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- SVGnest para nesting de formas irregulares (módulo opcional) -->
+  <!-- matrix.js y parallel.js no están en la lista original de 5 archivos:
+       SvgParser necesita Matrix en el hilo principal, y SvgNest necesita
+       Parallel (Web Workers) para calcular — sin ellos el cálculo no corre -->
+  <script src="lib/svgnest/util/matrix.js"></script>
+  <script src="lib/svgnest/util/parallel.js"></script>
+  <script src="lib/svgnest/svgnest.js"></script>
+  <script src="lib/svgnest/geometryutil.js"></script>
+  <script src="lib/svgnest/svgparser.js"></script>
+  <script src="lib/svgnest/placementworker.js"></script>
+  <script src="lib/svgnest/clipper.js"></script>
 </head>
 <body>
 
@@ -35,6 +46,30 @@
           <label for="plancha-kerf">Kerf / sangría (mm)</label>
           <input type="number" id="plancha-kerf" min="0" step="0.01" value="0.2" inputmode="decimal">
           <p class="texto-ayuda">Espacio entre piezas por el grosor del corte láser. Típico: 0.1–0.3mm</p>
+        </div>
+        <div class="campo-grupo">
+          <label>Modo de nesting</label>
+          <div class="modo-nesting-opciones">
+            <label class="modo-nesting-opcion">
+              <input type="radio" name="modo-nesting" id="modo-rectangular" value="rectangular" checked>
+              Rectangular (rápido)
+            </label>
+            <label class="modo-nesting-opcion">
+              <input type="radio" name="modo-nesting" id="modo-irregular" value="irregular">
+              Irregular (lento, formas reales)
+            </label>
+          </div>
+          <p id="modo-irregular-aviso" class="texto-ayuda texto-ayuda--error oculto"></p>
+        </div>
+        <div id="tiempo-maximo-grupo" class="campo-grupo oculto">
+          <label for="tiempo-maximo">Tiempo máximo (segundos)</label>
+          <select id="tiempo-maximo">
+            <option value="30">30</option>
+            <option value="60" selected>60</option>
+            <option value="120">120</option>
+            <option value="300">300</option>
+          </select>
+          <p class="texto-ayuda">El cálculo se detiene solo al llegar a este tiempo y muestra el mejor resultado encontrado.</p>
         </div>
       </fieldset>
 
@@ -107,6 +142,15 @@
       <!-- 5. Acciones principales -->
       <div class="bloque acciones-principales">
         <button id="btn-calcular" class="btn btn-acento btn-grande btn-block">Calcular nesting</button>
+        <div id="progreso-irregular" class="progreso-irregular oculto">
+          <div class="progreso-barra-fondo">
+            <div id="progreso-barra-relleno" class="progreso-barra-relleno" style="width: 0%"></div>
+          </div>
+          <div class="progreso-fila">
+            <span id="progreso-texto" class="progreso-texto mono">0%</span>
+            <button type="button" id="btn-detener-irregular" class="btn btn-secundario">Detener</button>
+          </div>
+        </div>
         <button id="btn-limpiar" class="btn btn-secundario btn-block">Limpiar todo</button>
       </div>
 
@@ -153,6 +197,22 @@
             <span class="indicador-label">Área usada/total (cm²)</span>
             <span class="indicador-valor mono" id="ind-area">0 / 0</span>
           </div>
+          <div class="indicador indicador-kerf">
+            <span class="indicador-label">Kerf</span>
+            <div class="kerf-fila">
+              <span id="kerf-icono" class="kerf-icono">
+                <span class="kerf-rect"></span>
+                <span class="kerf-rect"></span>
+              </span>
+              <span class="indicador-valor mono" id="ind-kerf">Sangría: 0mm (sin sangría)</span>
+            </div>
+          </div>
+        </div>
+        <div id="canvas-controles" class="canvas-controles">
+          <button type="button" id="btn-zoom-in" class="btn-control-canvas" aria-label="Acercar">+</button>
+          <button type="button" id="btn-zoom-out" class="btn-control-canvas" aria-label="Alejar">&minus;</button>
+          <button type="button" id="btn-zoom-reset" class="btn-control-canvas" aria-label="Restablecer zoom" title="Restablecer zoom">&#10226;</button>
+          <button type="button" id="btn-pantalla-completa" class="btn-control-canvas" aria-label="Pantalla completa" title="Pantalla completa">&#9974;</button>
         </div>
         <div id="canvas-controles" class="canvas-controles">
           <button type="button" id="btn-zoom-in" class="btn-control-canvas" aria-label="Acercar">+</button>

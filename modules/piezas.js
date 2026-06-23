@@ -11,7 +11,7 @@ function generarId() {
 
 /**
  * Agrega una pieza al listado en memoria.
- * @param {{nombre: string, cantidad: number, ancho: number, alto: number, material?: string}} datos
+ * @param {{nombre: string, cantidad: number, ancho: number, alto: number, material?: string, vertices?: Array<{x:number,y:number}>|null}} datos
  * @returns {object} la pieza creada
  */
 export function agregarPieza(datos) {
@@ -21,7 +21,11 @@ export function agregarPieza(datos) {
     cantidad: datos.cantidad,
     ancho: datos.ancho,
     alto: datos.alto,
-    material: datos.material || ''
+    material: datos.material || '',
+    // null = pieza rectangular (se usan los 4 vértices del rectángulo
+    // ancho×alto como contorno). Si tiene datos, es una forma irregular
+    // con contorno real, usado por el motor de nesting irregular (SVGnest).
+    vertices: datos.vertices || null
   };
   piezas.push(pieza);
   return pieza;
@@ -293,14 +297,33 @@ function leerEntidadLWPolyline(lineas, inicio, numeroPieza) {
     return { pieza: null, siguienteIndice: j };
   }
 
-  const xs = vertices.map(v => v.x);
-  const ys = vertices.map(v => v.y);
-  const ancho = Math.max(...xs) - Math.min(...xs);
-  const alto = Math.max(...ys) - Math.min(...ys);
+  // El último vértice puede repetir al primero si el polígono vino cerrado
+  // explícitamente con un punto duplicado; se descarta para no duplicar la
+  // esquina en el contorno final.
+  const verticesUnicos = cerradaPorPuntos ? vertices.slice(0, -1) : vertices;
+  if (verticesUnicos.length < 3) {
+    return { pieza: null, siguienteIndice: j };
+  }
+
+  const xs = verticesUnicos.map(v => v.x);
+  const ys = verticesUnicos.map(v => v.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const ancho = Math.max(...xs) - minX;
+  const alto = Math.max(...ys) - minY;
 
   if (!(ancho > 0) || !(alto > 0)) {
     return { pieza: null, siguienteIndice: j };
   }
+
+  // Vértices normalizados: se resta el mínimo x/y para que el contorno
+  // arranque en (0,0), igual que asume el resto de la app (ancho/alto del
+  // bounding box siguen calculándose para compatibilidad con el algoritmo
+  // de nesting rectangular).
+  const verticesNormalizados = verticesUnicos.map(v => ({
+    x: Math.round((v.x - minX) * 100) / 100,
+    y: Math.round((v.y - minY) * 100) / 100
+  }));
 
   return {
     pieza: {
@@ -308,7 +331,8 @@ function leerEntidadLWPolyline(lineas, inicio, numeroPieza) {
       cantidad: 1,
       ancho: Math.round(ancho * 100) / 100,
       alto: Math.round(alto * 100) / 100,
-      material: ''
+      material: '',
+      vertices: verticesNormalizados
     },
     siguienteIndice: j
   };

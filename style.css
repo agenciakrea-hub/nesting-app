@@ -188,6 +188,72 @@ input::placeholder {
   word-break: break-all;
 }
 
+.texto-ayuda--error {
+  color: var(--error);
+}
+
+/* ===================== Modo de nesting ===================== */
+.modo-nesting-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.modo-nesting-opcion {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.modo-nesting-opcion input[type="radio"] {
+  accent-color: var(--acento);
+  cursor: pointer;
+}
+
+.modo-nesting-opcion:has(input:disabled) {
+  color: var(--texto-debil);
+  cursor: not-allowed;
+}
+
+/* ===================== Progreso nesting irregular ===================== */
+.progreso-irregular {
+  margin: 0.6rem 0;
+}
+
+.progreso-irregular.oculto {
+  display: none;
+}
+
+.progreso-barra-fondo {
+  height: 8px;
+  background: var(--bg-base);
+  border: 1px solid var(--borde);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progreso-barra-relleno {
+  height: 100%;
+  background: var(--acento);
+  transition: width 0.15s ease;
+}
+
+.progreso-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.4rem;
+  gap: 0.6rem;
+}
+
+.progreso-texto {
+  font-size: 0.78rem;
+  color: var(--texto-tenue);
+}
+
 /* ===================== Botones ===================== */
 .btn {
   border: 1px solid var(--borde);
@@ -472,6 +538,36 @@ input::placeholder {
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--acento);
+}
+
+.indicador-kerf {
+  min-width: auto;
+}
+
+.kerf-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.kerf-icono {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0px;
+}
+
+.kerf-rect {
+  width: 11px;
+  height: 16px;
+  background: var(--acento);
+  border-radius: 1px;
+  display: inline-block;
+}
+
+.indicador-kerf .indicador-valor {
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 /* ===================== Aviso de piezas no ubicadas ===================== */

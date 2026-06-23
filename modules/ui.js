@@ -27,6 +27,14 @@ function cachearRefs() {
   refs.btnCalcular = document.getElementById('btn-calcular');
   refs.btnLimpiar = document.getElementById('btn-limpiar');
 
+  refs.radioModoRectangular = document.getElementById('modo-rectangular');
+  refs.radioModoIrregular = document.getElementById('modo-irregular');
+  refs.modoIrregularAviso = document.getElementById('modo-irregular-aviso');
+  refs.progresoIrregular = document.getElementById('progreso-irregular');
+  refs.progresoBarraRelleno = document.getElementById('progreso-barra-relleno');
+  refs.progresoTexto = document.getElementById('progreso-texto');
+  refs.btnDetenerIrregular = document.getElementById('btn-detener-irregular');
+
   refs.areaMensajes = document.getElementById('area-mensajes');
 
   refs.canvasWrap = document.getElementById('canvas-wrap');
@@ -42,6 +50,8 @@ function cachearRefs() {
   refs.indPiezas = document.getElementById('ind-piezas');
   refs.indPlanchas = document.getElementById('ind-planchas');
   refs.indArea = document.getElementById('ind-area');
+  refs.kerfIcono = document.getElementById('kerf-icono');
+  refs.indKerf = document.getElementById('ind-kerf');
   refs.piezasNoUbicadas = document.getElementById('piezas-no-ubicadas');
   refs.appHeader = document.getElementById('app-header');
 
@@ -183,6 +193,72 @@ export function mostrarNombreArchivo(nombre) {
   refs.nombreArchivo.textContent = nombre;
 }
 
+// ===================== Modo de nesting (rectangular / irregular) =====================
+
+/**
+ * Devuelve el modo de nesting seleccionado actualmente.
+ * @returns {'rectangular'|'irregular'}
+ */
+export function obtenerModoNesting() {
+  return refs.radioModoIrregular.checked ? 'irregular' : 'rectangular';
+}
+
+/**
+ * Deshabilita la opción de nesting irregular (por ejemplo si SVGnest no
+ * pudo cargarse) y muestra un aviso explicando por qué solo está
+ * disponible el modo rectangular.
+ * @param {string} mensaje
+ */
+export function deshabilitarModoIrregular(mensaje) {
+  refs.radioModoIrregular.disabled = true;
+  refs.radioModoRectangular.checked = true;
+  refs.modoIrregularAviso.textContent = mensaje;
+  refs.modoIrregularAviso.classList.remove('oculto');
+}
+
+/**
+ * Cambia el texto del botón principal de cálculo ("Calcular nesting" en
+ * modo rectangular, "Iniciar nesting" en modo irregular).
+ * @param {string} texto
+ */
+export function actualizarTextoBotonCalcular(texto) {
+  refs.btnCalcular.textContent = texto;
+}
+
+/**
+ * Habilita o deshabilita el botón principal de cálculo (se deshabilita
+ * mientras el nesting irregular está corriendo).
+ * @param {boolean} habilitado
+ */
+export function habilitarBotonCalcular(habilitado) {
+  refs.btnCalcular.disabled = !habilitado;
+}
+
+/**
+ * Muestra la barra de progreso del nesting irregular, reiniciada en 0%.
+ */
+export function mostrarProgresoIrregular() {
+  refs.progresoIrregular.classList.remove('oculto');
+  actualizarProgresoIrregular(0);
+}
+
+/**
+ * Oculta la barra de progreso del nesting irregular.
+ */
+export function ocultarProgresoIrregular() {
+  refs.progresoIrregular.classList.add('oculto');
+}
+
+/**
+ * Actualiza el porcentaje mostrado en la barra de progreso del nesting irregular.
+ * @param {number} porcentaje - 0 a 100
+ */
+export function actualizarProgresoIrregular(porcentaje) {
+  const valor = Math.min(100, Math.max(0, porcentaje || 0));
+  refs.progresoBarraRelleno.style.width = `${valor}%`;
+  refs.progresoTexto.textContent = `${valor}%`;
+}
+
 // ===================== Canvas: nesting =====================
 
 /**
@@ -281,10 +357,27 @@ function dibujarPieza(ctx, pieza, offsetXPlancha, offsetYPlancha, factor) {
   const h = pieza.alto * factor;
 
   ctx.fillStyle = colorDesdeId(pieza.piezaId);
-  ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
   ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, Math.max(w - 1, 0), Math.max(h - 1, 0));
+
+  if (Array.isArray(pieza.vertices) && pieza.vertices.length >= 3) {
+    // Forma irregular (nesting con SVGnest): dibuja el contorno real en vez
+    // del rectángulo. Los vértices ya vienen en mm relativos a la plancha,
+    // en el mismo sistema de coordenadas que pieza.x/pieza.y.
+    ctx.beginPath();
+    pieza.vertices.forEach((v, i) => {
+      const vx = offsetXPlancha + v.x * factor;
+      const vy = offsetYPlancha + v.y * factor;
+      if (i === 0) ctx.moveTo(vx, vy);
+      else ctx.lineTo(vx, vy);
+    });
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x + 0.5, y + 0.5, Math.max(w - 1, 0), Math.max(h - 1, 0));
+  }
 
   dibujarEtiquetaPieza(ctx, pieza, x, y, w, h);
 }
@@ -488,13 +581,36 @@ export function renderizarNesting(resultado, plancha) {
   dibujarNestingConTransform();
 }
 
+// Kerf (mm) al que se le asigna el espacio visual máximo entre los dos
+// rectángulos del ícono; valores mayores quedan topados a ese máximo.
+const KERF_ICONO_MAX_MM = 0.5;
+const KERF_ICONO_GAP_MAX_PX = 14;
+
+/**
+ * Ajusta el espacio entre los dos rectángulos del ícono de kerf de forma
+ * proporcional al valor de kerf (0mm = rectángulos pegados, sin espacio).
+ * @param {number} kerf
+ */
+function actualizarIconoKerf(kerf) {
+  const proporcion = Math.min(Math.max(kerf, 0) / KERF_ICONO_MAX_MM, 1);
+  const gapPx = Math.round(proporcion * KERF_ICONO_GAP_MAX_PX);
+  refs.kerfIcono.style.gap = `${gapPx}px`;
+
+  refs.indKerf.textContent = kerf > 0
+    ? `Sangría: ${kerf}mm`
+    : `Sangría: 0mm (sin sangría)`;
+}
+
+
 /**
  * Actualiza los indicadores numéricos sobre el canvas (aprovechamiento,
- * piezas ubicadas, planchas usadas, área usada/total) y los hace visibles.
+ * piezas ubicadas, planchas usadas, área usada/total, kerf) y los hace
+ * visibles.
  * @param {object} estadisticas - resultado de calcularEstadisticas()
  * @param {number} totalPiezasOriginal - cantidad total de unidades cargadas
+ * @param {number} kerf - sangría de corte usada en el cálculo, en mm
  */
-export function actualizarIndicadoresNesting(estadisticas, totalPiezasOriginal) {
+export function actualizarIndicadoresNesting(estadisticas, totalPiezasOriginal, kerf) {
   refs.canvasPlaceholder.style.display = 'none';
   refs.canvasIndicadores.classList.remove('oculto');
   refs.appHeader.classList.add('oculto');
@@ -503,6 +619,7 @@ export function actualizarIndicadoresNesting(estadisticas, totalPiezasOriginal) 
   refs.indPiezas.textContent = `${estadisticas.piezasUbicadas}/${totalPiezasOriginal}`;
   refs.indPlanchas.textContent = `${estadisticas.totalPlanchas}`;
   refs.indArea.textContent = `${Math.round(estadisticas.areaUsada / 100)} / ${Math.round(estadisticas.areaTotal / 100)}`;
+  actualizarIconoKerf(kerf);
 }
 
 /**
@@ -571,6 +688,8 @@ function cerrarModalAyuda() {
  * @param {() => void} callbacks.onExportarDXF
  * @param {() => void} callbacks.onExportarPDF
  * @param {() => void} callbacks.onExportarExcel
+ * @param {(modo: 'rectangular'|'irregular') => void} callbacks.onCambiarModoNesting
+ * @param {() => void} callbacks.onDetenerIrregular
  */
 export function inicializarUI(callbacks) {
   cachearRefs();
@@ -604,6 +723,17 @@ export function inicializarUI(callbacks) {
 
   refs.btnLimpiar.addEventListener('click', () => {
     callbacks.onLimpiarTodo();
+  });
+
+  refs.radioModoRectangular.addEventListener('change', () => {
+    if (refs.radioModoRectangular.checked) callbacks.onCambiarModoNesting('rectangular');
+  });
+  refs.radioModoIrregular.addEventListener('change', () => {
+    if (refs.radioModoIrregular.checked) callbacks.onCambiarModoNesting('irregular');
+  });
+
+  refs.btnDetenerIrregular.addEventListener('click', () => {
+    callbacks.onDetenerIrregular();
   });
 
   refs.btnExportarSVG.addEventListener('click', () => callbacks.onExportarSVG());

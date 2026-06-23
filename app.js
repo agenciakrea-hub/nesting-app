@@ -15,9 +15,17 @@ import {
   renderizarNesting,
   actualizarIndicadoresNesting,
   mostrarPiezasNoUbicadas,
-  mostrarSeccionExportar
+  mostrarSeccionExportar,
+  obtenerModoNesting,
+  deshabilitarModoIrregular,
+  actualizarTextoBotonCalcular,
+  habilitarBotonCalcular,
+  mostrarProgresoIrregular,
+  ocultarProgresoIrregular,
+  actualizarProgresoIrregular
 } from './modules/ui.js';
 import { calcularNesting, calcularEstadisticas } from './modules/nesting.js';
+import { calcularNestingIrregular, detenerNestingIrregular, svgNestDisponible } from './modules/nesting-irregular.js';
 import { exportarSVG, exportarDXF, exportarPDF, exportarExcel } from './modules/exportar.js';
 
 function refrescarLista() {
@@ -60,28 +68,46 @@ async function manejarImportarArchivo(file) {
   }
 }
 
-function manejarCalcular() {
+// Valida piezas/plancha y devuelve {piezas, plancha, kerf} o null si hay
+// un error (ya mostrado en el área de mensajes). Común a ambos modos.
+function validarAntesDeCalcular() {
   const piezas = obtenerPiezas();
   if (piezas.length === 0) {
     mostrarMensaje('Cargá al menos una pieza antes de calcular.', 'error');
-    return;
+    return null;
   }
 
   const plancha = obtenerDimensionesPlancha();
   if (!Number.isFinite(plancha.ancho) || plancha.ancho <= 0 || !Number.isFinite(plancha.alto) || plancha.alto <= 0) {
     mostrarMensaje('Las dimensiones de la plancha deben ser mayores a 0.', 'error');
-    return;
+    return null;
   }
 
   const kerfLeido = obtenerKerf();
   const kerf = Number.isFinite(kerfLeido) && kerfLeido > 0 ? kerfLeido : 0;
+
+  return { piezas, plancha, kerf };
+}
+
+function manejarCalcular() {
+  if (obtenerModoNesting() === 'irregular') {
+    manejarCalcularIrregular();
+  } else {
+    manejarCalcularRectangular();
+  }
+}
+
+function manejarCalcularRectangular() {
+  const datos = validarAntesDeCalcular();
+  if (!datos) return;
+  const { piezas, plancha, kerf } = datos;
 
   const resultado = calcularNesting(piezas, plancha, kerf);
   const estadisticas = calcularEstadisticas(resultado.ubicadas, plancha);
   const totalPiezasOriginal = piezas.reduce((acc, p) => acc + p.cantidad, 0);
 
   renderizarNesting(resultado, plancha);
-  actualizarIndicadoresNesting(estadisticas, totalPiezasOriginal);
+  actualizarIndicadoresNesting(estadisticas, totalPiezasOriginal, kerf);
   mostrarPiezasNoUbicadas(resultado.noUbicadas);
   mostrarSeccionExportar();
 
@@ -104,6 +130,90 @@ function manejarCalcular() {
       `Nesting calculado: ${estadisticas.totalPlanchas} plancha(s), ${estadisticas.aprovechamiento}% de aprovechamiento.`,
       'exito'
     );
+  }
+}
+
+// El nesting irregular (SVGnest) es iterativo: no termina solo, sigue
+// mejorando hasta que el usuario presiona "Detener". Cada mejora parcial
+// se dibuja en el canvas para que se vea el progreso en vivo.
+function manejarCalcularIrregular() {
+  const datos = validarAntesDeCalcular();
+  if (!datos) return;
+  const { piezas, plancha, kerf } = datos;
+
+  habilitarBotonCalcular(false);
+  mostrarProgresoIrregular();
+  mostrarMensaje('Nesting irregular en curso… presioná Detener cuando el resultado te convenza.', 'info');
+
+  calcularNestingIrregular(
+    piezas,
+    plancha,
+    kerf,
+    (porcentaje, parcial) => {
+      actualizarProgresoIrregular(porcentaje);
+      if (parcial) {
+        renderizarNesting(parcial, plancha);
+        const totalPiezasOriginal = piezas.reduce((acc, p) => acc + p.cantidad, 0);
+        const estadisticasParciales = calcularEstadisticas(parcial.ubicadas, plancha);
+        actualizarIndicadoresNesting(estadisticasParciales, totalPiezasOriginal, kerf);
+        mostrarPiezasNoUbicadas(parcial.noUbicadas);
+      }
+    },
+    (final) => manejarResultadoIrregularFinal(final, piezas, plancha, kerf)
+  );
+}
+
+function manejarResultadoIrregularFinal(final, piezas, plancha, kerf) {
+  ocultarProgresoIrregular();
+  habilitarBotonCalcular(true);
+
+  if (final.error) {
+    mostrarMensaje(final.error, 'error');
+    return;
+  }
+
+  const estadisticas = calcularEstadisticas(final.ubicadas, plancha);
+  const totalPiezasOriginal = piezas.reduce((acc, p) => acc + p.cantidad, 0);
+
+  renderizarNesting(final, plancha);
+  actualizarIndicadoresNesting(estadisticas, totalPiezasOriginal, kerf);
+  mostrarPiezasNoUbicadas(final.noUbicadas);
+  mostrarSeccionExportar();
+
+  window.ultimoNesting = {
+    ubicadas: final.ubicadas,
+    noUbicadas: final.noUbicadas,
+    totalPlanchas: final.totalPlanchas,
+    estadisticas,
+    plancha,
+    kerf
+  };
+
+  const resumenIteraciones = `(${final.iteraciones || 0} iteraciones, ${final.mejoras || 0} mejoras)`;
+  if (final.noUbicadas.length > 0) {
+    mostrarMensaje(
+      `Nesting irregular detenido ${resumenIteraciones}: ${final.ubicadas.length} de ${totalPiezasOriginal} piezas ubicadas. ${final.noUbicadas.length} no entraron.`,
+      'error'
+    );
+  } else {
+    mostrarMensaje(
+      `Nesting irregular detenido ${resumenIteraciones}: ${estadisticas.totalPlanchas} plancha(s), ${estadisticas.aprovechamiento}% de aprovechamiento.`,
+      'exito'
+    );
+  }
+}
+
+function manejarDetenerIrregular() {
+  detenerNestingIrregular();
+}
+
+function manejarCambiarModoNesting(modo) {
+  if (modo === 'irregular') {
+    actualizarTextoBotonCalcular('Iniciar nesting');
+  } else {
+    actualizarTextoBotonCalcular('Calcular nesting');
+    ocultarProgresoIrregular();
+    habilitarBotonCalcular(true);
   }
 }
 
@@ -171,7 +281,15 @@ inicializarUI({
   onExportarSVG: manejarExportarSVG,
   onExportarDXF: manejarExportarDXF,
   onExportarPDF: manejarExportarPDF,
-  onExportarExcel: manejarExportarExcel
+  onExportarExcel: manejarExportarExcel,
+  onCambiarModoNesting: manejarCambiarModoNesting,
+  onDetenerIrregular: manejarDetenerIrregular
 });
+
+// El modo irregular depende de SVGnest (lib/svgnest/); si no cargó bien,
+// se deshabilita esa opción y queda disponible solo el modo rectangular.
+if (!svgNestDisponible()) {
+  deshabilitarModoIrregular('SVGnest no se pudo cargar. Solo está disponible el modo rectangular.');
+}
 
 refrescarLista();
