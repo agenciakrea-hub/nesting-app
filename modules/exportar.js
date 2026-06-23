@@ -72,7 +72,13 @@ function generarSVGPlancha(piezas, plancha) {
   ];
 
   piezas.forEach(p => {
-    lineas.push(`  <rect x="${p.x}" y="${p.y}" width="${p.ancho}" height="${p.alto}" fill="none" stroke="#000000" stroke-width="0.1"/>`);
+    if (Array.isArray(p.vertices) && p.vertices.length >= 3) {
+      // Pieza irregular: los vértices ya están en coordenadas mundo (incluyen x/y offset)
+      const puntos = p.vertices.map(v => `${v.x},${v.y}`).join(' ');
+      lineas.push(`  <polygon points="${puntos}" fill="none" stroke="#000000" stroke-width="0.1"/>`);
+    } else {
+      lineas.push(`  <rect x="${p.x}" y="${p.y}" width="${p.ancho}" height="${p.alto}" fill="none" stroke="#000000" stroke-width="0.1"/>`);
+    }
     lineas.push(`  <text x="${p.x + p.ancho / 2}" y="${p.y + p.alto / 2}" font-size="4" fill="#000000" text-anchor="middle" dominant-baseline="middle">${escaparXML(p.nombre)}</text>`);
   });
 

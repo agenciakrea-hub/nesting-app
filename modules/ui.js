@@ -30,6 +30,8 @@ function cachearRefs() {
   refs.radioModoRectangular = document.getElementById('modo-rectangular');
   refs.radioModoIrregular = document.getElementById('modo-irregular');
   refs.modoIrregularAviso = document.getElementById('modo-irregular-aviso');
+  refs.tiempoMaximoGrupo = document.getElementById('tiempo-maximo-grupo');
+  refs.tiempoMaximo = document.getElementById('tiempo-maximo');
   refs.progresoIrregular = document.getElementById('progreso-irregular');
   refs.progresoBarraRelleno = document.getElementById('progreso-barra-relleno');
   refs.progresoTexto = document.getElementById('progreso-texto');
@@ -214,6 +216,38 @@ export function deshabilitarModoIrregular(mensaje) {
   refs.radioModoRectangular.checked = true;
   refs.modoIrregularAviso.textContent = mensaje;
   refs.modoIrregularAviso.classList.remove('oculto');
+  ocultarGrupoTiempoMaximo();
+}
+
+/**
+ * Fuerza la selección del modo rectangular sin disparar el evento change.
+ */
+export function seleccionarModoRectangular() {
+  refs.radioModoRectangular.checked = true;
+  refs.radioModoIrregular.checked = false;
+  ocultarGrupoTiempoMaximo();
+}
+
+/**
+ * Devuelve el tiempo máximo de cálculo irregular configurado, en segundos.
+ * @returns {number}
+ */
+export function obtenerTiempoMaximo() {
+  return parseInt(refs.tiempoMaximo.value, 10) || 60;
+}
+
+/**
+ * Muestra el selector de tiempo máximo (solo visible en modo irregular).
+ */
+export function mostrarGrupoTiempoMaximo() {
+  refs.tiempoMaximoGrupo.classList.remove('oculto');
+}
+
+/**
+ * Oculta el selector de tiempo máximo.
+ */
+export function ocultarGrupoTiempoMaximo() {
+  refs.tiempoMaximoGrupo.classList.add('oculto');
 }
 
 /**
@@ -641,12 +675,22 @@ export function mostrarPiezasNoUbicadas(noUbicadas) {
 }
 
 /**
+ * Muestra un mensaje en el placeholder del canvas indicando que el cálculo
+ * irregular está en curso y todavía no hay ninguna solución parcial.
+ */
+export function mostrarEstadoCalculandoIrregular() {
+  refs.canvasPlaceholder.style.display = 'block';
+  refs.canvasPlaceholder.textContent = 'Calculando… buscando primera solución';
+}
+
+/**
  * Vuelve el canvas a su estado vacío: oculta indicadores, aviso y la
  * sección de exportar, muestra el placeholder y redibuja la grilla de fondo.
  */
 export function reiniciarCanvas() {
   refs.canvasIndicadores.classList.add('oculto');
   refs.canvasPlaceholder.style.display = 'block';
+  refs.canvasPlaceholder.textContent = 'Cargá tus piezas y presioná Calcular';
   refs.piezasNoUbicadas.classList.add('oculto');
   refs.piezasNoUbicadas.innerHTML = '';
   refs.seccionExportar.classList.add('oculto');

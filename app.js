@@ -17,12 +17,17 @@ import {
   mostrarPiezasNoUbicadas,
   mostrarSeccionExportar,
   obtenerModoNesting,
+  obtenerTiempoMaximo,
   deshabilitarModoIrregular,
+  seleccionarModoRectangular,
   actualizarTextoBotonCalcular,
   habilitarBotonCalcular,
   mostrarProgresoIrregular,
   ocultarProgresoIrregular,
-  actualizarProgresoIrregular
+  actualizarProgresoIrregular,
+  mostrarGrupoTiempoMaximo,
+  ocultarGrupoTiempoMaximo,
+  mostrarEstadoCalculandoIrregular
 } from './modules/ui.js';
 import { calcularNesting, calcularEstadisticas } from './modules/nesting.js';
 import { calcularNestingIrregular, detenerNestingIrregular, svgNestDisponible } from './modules/nesting-irregular.js';
@@ -137,18 +142,31 @@ function manejarCalcularRectangular() {
 // mejorando hasta que el usuario presiona "Detener". Cada mejora parcial
 // se dibuja en el canvas para que se vea el progreso en vivo.
 function manejarCalcularIrregular() {
+  // Punto 3: verificación defensiva en el momento del click, no solo al inicio
+  if (!svgNestDisponible()) {
+    deshabilitarModoIrregular('SVGnest no se pudo cargar. Solo está disponible el modo rectangular.');
+    seleccionarModoRectangular();
+    actualizarTextoBotonCalcular('Calcular nesting');
+    mostrarMensaje('SVGnest no está disponible. Cambiando a modo rectangular.', 'error');
+    return;
+  }
+
   const datos = validarAntesDeCalcular();
   if (!datos) return;
   const { piezas, plancha, kerf } = datos;
+  const tiempoMaximo = obtenerTiempoMaximo();
 
   habilitarBotonCalcular(false);
   mostrarProgresoIrregular();
-  mostrarMensaje('Nesting irregular en curso… presioná Detener cuando el resultado te convenza.', 'info');
+  // Punto 2: mensaje inicial mientras no hay solución parcial
+  mostrarEstadoCalculandoIrregular();
+  mostrarMensaje('Nesting irregular en curso… se detiene automáticamente al llegar al tiempo máximo.', 'info');
 
   calcularNestingIrregular(
     piezas,
     plancha,
     kerf,
+    tiempoMaximo,
     (porcentaje, parcial) => {
       actualizarProgresoIrregular(porcentaje);
       if (parcial) {
@@ -157,6 +175,9 @@ function manejarCalcularIrregular() {
         const estadisticasParciales = calcularEstadisticas(parcial.ubicadas, plancha);
         actualizarIndicadoresNesting(estadisticasParciales, totalPiezasOriginal, kerf);
         mostrarPiezasNoUbicadas(parcial.noUbicadas);
+      } else {
+        // Punto 2: todavía sin solución parcial, mantener mensaje de búsqueda
+        mostrarEstadoCalculandoIrregular();
       }
     },
     (final) => manejarResultadoIrregularFinal(final, piezas, plancha, kerf)
@@ -210,8 +231,10 @@ function manejarDetenerIrregular() {
 function manejarCambiarModoNesting(modo) {
   if (modo === 'irregular') {
     actualizarTextoBotonCalcular('Iniciar nesting');
+    mostrarGrupoTiempoMaximo();
   } else {
     actualizarTextoBotonCalcular('Calcular nesting');
+    ocultarGrupoTiempoMaximo();
     ocultarProgresoIrregular();
     habilitarBotonCalcular(true);
   }
