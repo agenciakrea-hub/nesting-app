@@ -377,11 +377,14 @@ function leerEntidadLWPolyline(lineas, inicio, numeroPieza, factor = 1) {
  * Lee $INSUNITS del encabezado para convertir coordenadas a mm automáticamente.
  * factorManual permite forzar la escala cuando el archivo tiene $INSUNITS
  * incorrecto (ej.: archivo en cm exportado con cabecera declarando mm).
+ * umbralMinimo descarta piezas cuyo lado más corto sea menor al umbral (en mm):
+ * útil para filtrar ranuras de ensamblaje (finger joints) que no son piezas a anidar.
  * @param {File} file
  * @param {number|null} factorManual - null = auto desde $INSUNITS; 1=mm, 10=cm, 25.4=in
- * @returns {Promise<{piezas: Array, omitidas: number, unidadDetectada: string}>}
+ * @param {number} umbralMinimo - descarta piezas con min(ancho,alto) < umbral mm (0 = sin filtro)
+ * @returns {Promise<{piezas, omitidas, unidadAplicada, unidadDeclarada, artefactosDescartados, filtradosPorUmbral}>}
  */
-export async function importarDesdeDXF(file, factorManual = null) {
+export async function importarDesdeDXF(file, factorManual = null, umbralMinimo = 0) {
   const texto = await file.text();
   const lineas = texto.split(/\r?\n/).map(l => l.trim());
 
@@ -428,9 +431,27 @@ export async function importarDesdeDXF(file, factorManual = null) {
     throw new Error('No se encontraron contornos cerrados en el DXF. Asegurate de exportar como LWPOLYLINE desde tu CAD.');
   }
 
+  // Descartar artefactos sub-milímetro (< 0.5mm en cualquier dimensión = ruido de la exportación CAD)
+  const UMBRAL_ARTEFACTO = 0.5;
+  const sinArtefactos = piezasNuevas.filter(p => p.ancho >= UMBRAL_ARTEFACTO && p.alto >= UMBRAL_ARTEFACTO);
+  const artefactosDescartados = piezasNuevas.length - sinArtefactos.length;
+
+  // Filtro opcional por tamaño mínimo de lado: descarta finger joints, ranuras, cortes internos.
+  // El umbral se aplica al lado más corto de cada pieza.
+  let piezasFiltradas = sinArtefactos;
+  let filtradosPorUmbral = 0;
+  if (umbralMinimo > 0) {
+    piezasFiltradas = sinArtefactos.filter(p => Math.min(p.ancho, p.alto) >= umbralMinimo);
+    filtradosPorUmbral = sinArtefactos.length - piezasFiltradas.length;
+  }
+
+  if (piezasFiltradas.length === 0) {
+    throw new Error(`Después del filtrado no quedaron piezas. Reducí el "Filtrar menores a" o ajustá la unidad.`);
+  }
+
   // Agrupar piezas con mismo nombre y mismas dimensiones (suma cantidades)
   const mapa = new Map();
-  for (const p of piezasNuevas) {
+  for (const p of piezasFiltradas) {
     const clave = `${p.nombre}||${p.ancho}||${p.alto}`;
     if (mapa.has(clave)) {
       mapa.get(clave).cantidad++;
@@ -440,7 +461,14 @@ export async function importarDesdeDXF(file, factorManual = null) {
   }
   const piezasMergeadas = Array.from(mapa.values());
 
-  return { piezas: piezasMergeadas, omitidas: 0, unidadAplicada: etiquetaAplicada, unidadDeclarada };
+  return {
+    piezas: piezasMergeadas,
+    omitidas: 0,
+    unidadAplicada: etiquetaAplicada,
+    unidadDeclarada,
+    artefactosDescartados,
+    filtradosPorUmbral
+  };
 }
 
 // ===================== Router de importación =====================
@@ -468,7 +496,7 @@ export async function importarArchivo(file, opciones = {}) {
       resultado = await importarDesdeSVG(file);
       break;
     case 'dxf':
-      resultado = await importarDesdeDXF(file, opciones.factorEscalaDXF ?? null);
+      resultado = await importarDesdeDXF(file, opciones.factorEscalaDXF ?? null, opciones.umbralMinimoDXF ?? 0);
       break;
     default:
       throw new Error('Formato no soportado. Usá CSV, Excel, SVG o DXF.');
@@ -485,6 +513,8 @@ export async function importarArchivo(file, opciones = {}) {
     cantidadAgregadas: agregadas.length,
     omitidas: resultado.omitidas || 0,
     unidadAplicada: resultado.unidadAplicada || null,
-    unidadDeclarada: resultado.unidadDeclarada || null
+    unidadDeclarada: resultado.unidadDeclarada || null,
+    artefactosDescartados: resultado.artefactosDescartados || 0,
+    filtradosPorUmbral: resultado.filtradosPorUmbral || 0
   };
 }

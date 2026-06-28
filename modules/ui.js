@@ -29,6 +29,7 @@ function cachearRefs() {
   refs.nombreArchivo = document.getElementById('nombre-archivo');
   refs.dxfUnidadGrupo = document.getElementById('dxf-unidad-grupo');
   refs.dxfUnidad = document.getElementById('dxf-unidad');
+  refs.dxfMinLado = document.getElementById('dxf-min-lado');
   refs.btnImportarDXF = document.getElementById('btn-importar-dxf');
 
   refs.listaPiezas = document.getElementById('lista-piezas');
@@ -233,6 +234,15 @@ export function obtenerFactorEscalaDXF() {
   if (val === 'cm') return 10;
   if (val === 'in') return 25.4;
   return null; // auto
+}
+
+/**
+ * Devuelve el umbral mínimo de lado para filtrar piezas del DXF (en mm).
+ * 0 = sin filtro.
+ * @returns {number}
+ */
+export function obtenerUmbralMinimoDXF() {
+  return parseFloat(refs.dxfMinLado?.value) || 0;
 }
 
 /**
@@ -727,9 +737,26 @@ export function mostrarPiezasNoUbicadas(noUbicadas) {
     return;
   }
 
-  const detalle = noUbicadas.map(p => `${p.nombre} (${p.ancho}×${p.alto}mm)`).join(', ');
-  refs.piezasNoUbicadas.innerHTML =
-    `<strong>No se pudieron ubicar ${noUbicadas.length} pieza(s):</strong>${detalle}`;
+  // Agrupar por categoría para dar contexto útil en vez de listar todo
+  const microformas = noUbicadas.filter(p => p.ancho < 1 && p.alto < 1);
+  const delgadas    = noUbicadas.filter(p => !(p.ancho < 1 && p.alto < 1) && Math.min(p.ancho, p.alto) < 5);
+  const normales    = noUbicadas.filter(p => Math.min(p.ancho, p.alto) >= 5);
+
+  let html = `<strong>No se pudieron ubicar ${noUbicadas.length} pieza(s):</strong>`;
+
+  if (microformas.length) {
+    html += `<br>• ${microformas.length} microforma(s) &lt;1mm — ruido del DXF (filtrá con "Filtrar menores a 1")`;
+  }
+  if (delgadas.length) {
+    html += `<br>• ${delgadas.length} pieza(s) delgadas &lt;5mm — posibles ranuras/finger joints. Usá "Filtrar menores a 5" para ignorarlas`;
+  }
+  if (normales.length) {
+    const muestra = normales.slice(0, 4).map(p => `${p.nombre} (${p.ancho}×${p.alto}mm)`).join(', ');
+    const resto = normales.length > 4 ? ` … y ${normales.length - 4} más` : '';
+    html += `<br>• ${normales.length} pieza(s) de tamaño normal: ${muestra}${resto}`;
+  }
+
+  refs.piezasNoUbicadas.innerHTML = html;
   refs.piezasNoUbicadas.classList.remove('oculto');
 }
 

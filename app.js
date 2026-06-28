@@ -29,6 +29,7 @@ import {
   ocultarGrupoTiempoMaximo,
   mostrarEstadoCalculandoIrregular,
   obtenerFactorEscalaDXF,
+  obtenerUmbralMinimoDXF,
   obtenerMargen
 } from './modules/ui.js';
 import { calcularNesting, calcularEstadisticas } from './modules/nesting.js';
@@ -87,20 +88,29 @@ function manejarCambiarUnidadDXF() {
 async function manejarImportarArchivo(file) {
   try {
     const esDXF = file.name.toLowerCase().endsWith('.dxf');
-    const opciones = esDXF ? { factorEscalaDXF: obtenerFactorEscalaDXF() } : {};
+    const opciones = esDXF
+      ? { factorEscalaDXF: obtenerFactorEscalaDXF(), umbralMinimoDXF: obtenerUmbralMinimoDXF() }
+      : {};
     const resultado = await importarArchivo(file, opciones);
     refrescarLista();
     invalidarNesting();
+
     let mensaje = `Se importaron ${resultado.cantidadAgregadas} pieza(s) desde "${resultado.nombreArchivo}".`;
     if (resultado.unidadAplicada) {
       if (resultado.unidadDeclarada && resultado.unidadDeclarada !== resultado.unidadAplicada) {
-        mensaje += ` Medidas importadas como ${resultado.unidadAplicada} (el archivo declara ${resultado.unidadDeclarada}).`;
+        mensaje += ` Medidas en ${resultado.unidadAplicada} (archivo declara ${resultado.unidadDeclarada}).`;
       } else {
         mensaje += ` Medidas en ${resultado.unidadAplicada}.`;
       }
     }
+    if (resultado.artefactosDescartados > 0) {
+      mensaje += ` ${resultado.artefactosDescartados} microforma(s) sub-mm descartada(s) automáticamente.`;
+    }
+    if (resultado.filtradosPorUmbral > 0) {
+      mensaje += ` ${resultado.filtradosPorUmbral} pieza(s) filtrada(s) por tamaño mínimo.`;
+    }
     if (resultado.omitidas > 0) {
-      mensaje += ` Se omitieron ${resultado.omitidas} contorno(s) abiertos o inválidos.`;
+      mensaje += ` ${resultado.omitidas} contorno(s) abiertos omitidos.`;
     }
     mostrarMensaje(mensaje, 'exito');
   } catch (err) {

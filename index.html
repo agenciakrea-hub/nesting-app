@@ -143,10 +143,18 @@
               <option value="cm">Centímetros (cm)</option>
               <option value="in">Pulgadas (in)</option>
             </select>
-            <button type="button" id="btn-importar-dxf" class="btn btn-secundario btn-block" style="margin-top:0.55rem">Importar DXF</button>
-            <p class="texto-ayuda">Si las medidas quedan incorrectas (piezas muy chicas o muy grandes), cambiá la unidad y presioná <strong>Importar DXF</strong> de nuevo.</p>
-            <p class="texto-ayuda texto-ayuda--dxf-hint">Formas irregulares (L, U, canales, curvas): usá el modo <strong>Irregular</strong> — SVGnest las ubica por su contorno real.</p>
-            <p class="texto-ayuda texto-ayuda--dxf-hint">Si una forma no aparece: en AutoCAD hacé PEDIT → Join para convertirla a LWPOLYLINE cerrada antes de exportar.</p>
+            <div class="campo-grupo--doble" style="margin-top:0.5rem">
+              <div>
+                <label for="dxf-min-lado">Filtrar piezas menores a (mm)</label>
+                <input type="number" id="dxf-min-lado" min="0" step="0.5" value="0" inputmode="decimal">
+              </div>
+              <div style="display:flex;align-items:flex-end">
+                <button type="button" id="btn-importar-dxf" class="btn btn-secundario btn-block">Importar DXF</button>
+              </div>
+            </div>
+            <p class="texto-ayuda">Unidad incorrecta o piezas muy chicas/grandes → cambiá la unidad y volvé a presionar Importar DXF. "Filtrar" descarta piezas cuyo lado más corto sea menor al valor: útil para ignorar ranuras de ensamblaje (ej.: 5 mm).</p>
+            <p class="texto-ayuda texto-ayuda--dxf-hint">El DXF importa <strong>todas</strong> las LWPOLYLINEs cerradas, incluyendo cortes internos. Las formas irregulares (L, U, canales, curvas) sí se leen — en modo <strong>Irregular</strong> SVGnest las ubica por su contorno real, no por su bounding box.</p>
+            <p class="texto-ayuda texto-ayuda--dxf-hint">Si una forma no aparece: en AutoCAD hacé PEDIT → Join para convertirla a LWPOLYLINE cerrada antes de exportar. Las entidades LINE, ARC o SPLINE sueltas no se importan.</p>
           </div>
         </fieldset>
 
