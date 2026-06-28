@@ -39,17 +39,27 @@ function ordenarInstancias(instancias) {
 }
 
 /**
- * Decide si una instancia entra en un espacio libre rectangular, en
- * orientación normal o rotada (prefiere normal si ambas entran). El kerf
- * se suma como margen reservado en ambas dimensiones.
+ * Decide si una instancia entra en un espacio libre rectangular y en qué
+ * orientación conviene colocarla. Cuando ambas orientaciones caben, se
+ * prefiere la que consume más altura del espacio libre (deja menos espacio
+ * desaprovechado abajo), lo que permite mezclar orientaciones de la misma
+ * pieza y aprovechar mejor el remanente inferior de cada plancha.
  * @returns {'normal'|'rotada'|null}
  */
 function elegirOrientacionParaEspacio(espacio, inst, kerf) {
   const cabeNormal = inst.ancho + kerf <= espacio.ancho && inst.alto + kerf <= espacio.alto;
-  if (cabeNormal) return 'normal';
   const cabeRotada = inst.alto + kerf <= espacio.ancho && inst.ancho + kerf <= espacio.alto;
-  if (cabeRotada) return 'rotada';
-  return null;
+
+  if (!cabeNormal && !cabeRotada) return null;
+  if (cabeNormal && !cabeRotada) return 'normal';
+  if (!cabeNormal && cabeRotada) return 'rotada';
+
+  // Ambas caben: preferir la orientación donde la pieza ocupa más altura
+  // del espacio libre, dejando el menor remanente posible debajo.
+  // Cuando el remanente inferior es igual, se prefiere 'normal'.
+  const remanente_normal = espacio.alto - inst.alto;
+  const remanente_rotada = espacio.alto - inst.ancho;
+  return remanente_normal <= remanente_rotada ? 'normal' : 'rotada';
 }
 
 /**
