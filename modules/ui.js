@@ -19,6 +19,8 @@ function cachearRefs() {
   refs.inputArchivo = document.getElementById('input-archivo');
   refs.btnImportar = document.getElementById('btn-importar');
   refs.nombreArchivo = document.getElementById('nombre-archivo');
+  refs.dxfUnidadGrupo = document.getElementById('dxf-unidad-grupo');
+  refs.dxfUnidad = document.getElementById('dxf-unidad');
 
   refs.listaPiezas = document.getElementById('lista-piezas');
   refs.piezasVacio = document.getElementById('piezas-vacio');
@@ -193,6 +195,31 @@ export function obtenerKerf() {
  */
 export function mostrarNombreArchivo(nombre) {
   refs.nombreArchivo.textContent = nombre;
+}
+
+/**
+ * Muestra u oculta el selector de unidad DXF según la extensión del archivo.
+ * @param {string} extension - 'dxf' para mostrar, cualquier otro para ocultar
+ */
+export function actualizarSelectorUnidadDXF(extension) {
+  if (extension === 'dxf') {
+    refs.dxfUnidadGrupo.classList.remove('oculto');
+  } else {
+    refs.dxfUnidadGrupo.classList.add('oculto');
+  }
+}
+
+/**
+ * Devuelve el factor de escala elegido para el DXF importado.
+ * 'auto' → null (el parser lee $INSUNITS), 'mm' → 1, 'cm' → 10, 'in' → 25.4
+ * @returns {number|null}
+ */
+export function obtenerFactorEscalaDXF() {
+  const val = refs.dxfUnidad?.value ?? 'auto';
+  if (val === 'mm') return 1;
+  if (val === 'cm') return 10;
+  if (val === 'in') return 25.4;
+  return null; // auto
 }
 
 // ===================== Modo de nesting (rectangular / irregular) =====================
@@ -757,6 +784,8 @@ export function inicializarUI(callbacks) {
     const file = ev.target.files[0];
     if (!file) return;
     mostrarNombreArchivo(file.name);
+    const ext = file.name.split('.').pop().toLowerCase();
+    actualizarSelectorUnidadDXF(ext);
     callbacks.onImportarArchivo(file);
     refs.inputArchivo.value = '';
   });

@@ -80,6 +80,16 @@
         <button type="button" id="btn-importar" class="btn btn-secundario btn-block">Seleccionar archivo</button>
         <p class="texto-ayuda">Formatos soportados: CSV, Excel (.xlsx/.xls), SVG, DXF.</p>
         <p id="nombre-archivo" class="texto-ayuda texto-ayuda--archivo"></p>
+        <div id="dxf-unidad-grupo" class="campo-grupo oculto">
+          <label for="dxf-unidad">Unidad del DXF</label>
+          <select id="dxf-unidad">
+            <option value="auto">Automático (leer del archivo)</option>
+            <option value="mm">mm — milímetros</option>
+            <option value="cm">cm → mm (×10)</option>
+            <option value="in">pulgadas → mm (×25.4)</option>
+          </select>
+          <p class="texto-ayuda">Si las piezas importadas salen 10× más chicas de lo esperado, el archivo probablemente está en cm: elegí "cm → mm".</p>
+        </div>
       </fieldset>
 
       <!-- 3. Agregar pieza manualmente (plegable) -->

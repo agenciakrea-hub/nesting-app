@@ -254,15 +254,40 @@ export async function importarDesdeSVG(file) {
 
 // ===================== Importación: DXF =====================
 
+// Factores de conversión de unidades DXF ($INSUNITS) a milímetros.
+const FACTOR_POR_INSUNITS = {
+  1: 25.4,   // pulgadas
+  2: 304.8,  // pies
+  4: 1,      // milímetros (default)
+  5: 10,     // centímetros
+  6: 1000,   // metros
+};
+
+/**
+ * Lee el valor de $INSUNITS del encabezado DXF y devuelve el factor de
+ * conversión a mm. Devuelve 1 si no se encuentra (tratar como mm).
+ */
+function leerFactorUnidadDXF(lineas) {
+  for (let i = 0; i < lineas.length - 3; i += 2) {
+    if (lineas[i] === '0' && lineas[i + 1] === 'ENDSEC') break;
+    if (lineas[i] === '9' && lineas[i + 1] === '$INSUNITS' && lineas[i + 2] === '70') {
+      const insunits = parseInt(lineas[i + 3], 10);
+      return FACTOR_POR_INSUNITS[insunits] ?? 1;
+    }
+  }
+  return 1;
+}
+
 /**
  * Lee una entidad LWPOLYLINE a partir del índice donde empiezan sus pares
  * código/valor (justo después de la línea "0 / LWPOLYLINE").
  * @param {string[]} lineas
  * @param {number} inicio
  * @param {number} numeroPieza
+ * @param {number} factor - factor de conversión de unidades a mm (default 1)
  * @returns {{pieza: object|null, siguienteIndice: number}}
  */
-function leerEntidadLWPolyline(lineas, inicio, numeroPieza) {
+function leerEntidadLWPolyline(lineas, inicio, numeroPieza, factor = 1) {
   let capa = '';
   let cerrada = false;
   const vertices = [];
@@ -305,8 +330,8 @@ function leerEntidadLWPolyline(lineas, inicio, numeroPieza) {
     return { pieza: null, siguienteIndice: j };
   }
 
-  const xs = verticesUnicos.map(v => v.x);
-  const ys = verticesUnicos.map(v => v.y);
+  const xs = verticesUnicos.map(v => v.x * factor);
+  const ys = verticesUnicos.map(v => v.y * factor);
   const minX = Math.min(...xs);
   const minY = Math.min(...ys);
   const ancho = Math.max(...xs) - minX;
@@ -321,8 +346,8 @@ function leerEntidadLWPolyline(lineas, inicio, numeroPieza) {
   // bounding box siguen calculándose para compatibilidad con el algoritmo
   // de nesting rectangular).
   const verticesNormalizados = verticesUnicos.map(v => ({
-    x: Math.round((v.x - minX) * 100) / 100,
-    y: Math.round((v.y - minY) * 100) / 100
+    x: Math.round((v.x * factor - minX) * 100) / 100,
+    y: Math.round((v.y * factor - minY) * 100) / 100
   }));
 
   return {
@@ -340,14 +365,25 @@ function leerEntidadLWPolyline(lineas, inicio, numeroPieza) {
 
 /**
  * Importa piezas a partir de contornos cerrados (LWPOLYLINE) de un archivo DXF.
- * Las dimensiones se toman tal cual están en el archivo (se asume que el
- * DXF usa milímetros, que es lo más común en corte láser).
+ * Lee $INSUNITS del encabezado para convertir coordenadas a mm automáticamente.
+ * factorManual permite forzar la escala cuando el archivo tiene $INSUNITS
+ * incorrecto (ej.: archivo en cm exportado con cabecera declarando mm).
  * @param {File} file
- * @returns {Promise<{piezas: Array, omitidas: number}>}
+ * @param {number|null} factorManual - null = auto desde $INSUNITS; 1=mm, 10=cm, 25.4=in
+ * @returns {Promise<{piezas: Array, omitidas: number, unidadDetectada: string}>}
  */
-export async function importarDesdeDXF(file) {
+export async function importarDesdeDXF(file, factorManual = null) {
   const texto = await file.text();
   const lineas = texto.split(/\r?\n/).map(l => l.trim());
+
+  const factorAuto = leerFactorUnidadDXF(lineas);
+  const factor = factorManual !== null ? factorManual : factorAuto;
+
+  const etiquetaUnidad =
+    factor === 1 ? 'mm' :
+    factor === 10 ? 'cm → mm' :
+    factor === 25.4 ? 'pulgadas → mm' :
+    `×${factor}`;
 
   const piezasNuevas = [];
   let dentroEntities = false;
@@ -370,7 +406,7 @@ export async function importarDesdeDXF(file) {
     }
     if (dentroEntities && codigo === '0' && valor === 'LWPOLYLINE') {
       contadorPiezas++;
-      const resultado = leerEntidadLWPolyline(lineas, i + 2, contadorPiezas);
+      const resultado = leerEntidadLWPolyline(lineas, i + 2, contadorPiezas, factor);
       if (resultado.pieza) piezasNuevas.push(resultado.pieza);
       i = resultado.siguienteIndice;
       continue;
@@ -383,7 +419,7 @@ export async function importarDesdeDXF(file) {
     throw new Error('No se encontraron contornos cerrados en el DXF. Asegurate de exportar como LWPOLYLINE desde tu CAD.');
   }
 
-  return { piezas: piezasNuevas, omitidas: 0 };
+  return { piezas: piezasNuevas, omitidas: 0, unidadDetectada: etiquetaUnidad };
 }
 
 // ===================== Router de importación =====================
@@ -392,9 +428,11 @@ export async function importarDesdeDXF(file) {
  * Detecta el tipo de archivo por su extensión, lo parsea con el importador
  * correspondiente y agrega las piezas resultantes al modelo en memoria.
  * @param {File} file
- * @returns {Promise<{nombreArchivo: string, cantidadAgregadas: number, omitidas: number}>}
+ * @param {object} [opciones]
+ * @param {number|null} [opciones.factorEscalaDXF] - factor de conversión para DXF (null=auto)
+ * @returns {Promise<{nombreArchivo: string, cantidadAgregadas: number, omitidas: number, unidadDetectada?: string}>}
  */
-export async function importarArchivo(file) {
+export async function importarArchivo(file, opciones = {}) {
   const nombreArchivo = file.name;
   const extension = nombreArchivo.split('.').pop().toLowerCase();
 
@@ -409,7 +447,7 @@ export async function importarArchivo(file) {
       resultado = await importarDesdeSVG(file);
       break;
     case 'dxf':
-      resultado = await importarDesdeDXF(file);
+      resultado = await importarDesdeDXF(file, opciones.factorEscalaDXF ?? null);
       break;
     default:
       throw new Error('Formato no soportado. Usá CSV, Excel, SVG o DXF.');
@@ -424,6 +462,7 @@ export async function importarArchivo(file) {
   return {
     nombreArchivo,
     cantidadAgregadas: agregadas.length,
-    omitidas: resultado.omitidas || 0
+    omitidas: resultado.omitidas || 0,
+    unidadDetectada: resultado.unidadDetectada || null
   };
 }

@@ -27,7 +27,8 @@ import {
   actualizarProgresoIrregular,
   mostrarGrupoTiempoMaximo,
   ocultarGrupoTiempoMaximo,
-  mostrarEstadoCalculandoIrregular
+  mostrarEstadoCalculandoIrregular,
+  obtenerFactorEscalaDXF
 } from './modules/ui.js';
 import { calcularNesting, calcularEstadisticas } from './modules/nesting.js';
 import { calcularNestingIrregular, detenerNestingIrregular, svgNestDisponible } from './modules/nesting-irregular.js';
@@ -60,10 +61,15 @@ function manejarEliminarPieza(id) {
 
 async function manejarImportarArchivo(file) {
   try {
-    const resultado = await importarArchivo(file);
+    const esDXF = file.name.toLowerCase().endsWith('.dxf');
+    const opciones = esDXF ? { factorEscalaDXF: obtenerFactorEscalaDXF() } : {};
+    const resultado = await importarArchivo(file, opciones);
     refrescarLista();
     invalidarNesting();
     let mensaje = `Se importaron ${resultado.cantidadAgregadas} pieza(s) desde "${resultado.nombreArchivo}".`;
+    if (resultado.unidadDetectada) {
+      mensaje += ` Unidad: ${resultado.unidadDetectada}.`;
+    }
     if (resultado.omitidas > 0) {
       mensaje += ` Se omitieron ${resultado.omitidas} fila(s) por datos inválidos o vacíos.`;
     }
