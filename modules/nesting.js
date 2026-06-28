@@ -1,15 +1,18 @@
-// nesting.js — Motor de bin packing (Guillotine con best-fit y rotación 90°).
+// nesting.js — Motor de bin packing (MaxRects con Bottom-Left Fit y rotación 90°).
 // Módulo puro: solo recibe arrays/objetos y devuelve arrays/objetos.
 // Cero DOM, cero window, cero console.log.
+//
+// Algoritmo MaxRects: mantiene la lista completa de rectángulos libres
+// "maximales" (no se pueden agrandar sin solapar con una pieza). Cuando se
+// coloca una pieza, todos los rectángulos libres que se superponen con ella
+// se dividen en hasta 4 franjas, y luego se eliminan los que quedan
+// contenidos dentro de otro. Esto permite aprovechar mejor los huecos que
+// el corte guillotine no puede reutilizar.
 
-// Tolerancia para descartar espacios libres degenerados (ancho/alto ~0)
-// que pueden aparecer por errores de redondeo al cortar rectángulos.
 const EPS = 0.001;
 
 /**
  * Expande las piezas según su cantidad en instancias individuales a ubicar.
- * @param {Array} piezas
- * @returns {Array<{piezaId: string, nombre: string, ancho: number, alto: number}>}
  */
 function expandirInstancias(piezas) {
   const instancias = [];
@@ -22,71 +25,120 @@ function expandirInstancias(piezas) {
 }
 
 /**
- * Ordena las instancias de mayor a menor área (ancho × alto): las piezas
- * más grandes se ubican primero y las más chicas van rellenando los huecos
- * que van quedando. Empata por el lado más largo descendente.
- * @param {Array} instancias
+ * Ordena las instancias de mayor a menor área; empata por lado mayor descendente.
+ * Las piezas grandes van primero para que las chicas rellenen los huecos.
  */
 function ordenarInstancias(instancias) {
   instancias.sort((a, b) => {
-    const areaA = a.ancho * a.alto;
-    const areaB = b.ancho * b.alto;
-    if (areaB !== areaA) return areaB - areaA;
-    const altA = Math.max(a.ancho, a.alto);
-    const altB = Math.max(b.ancho, b.alto);
-    return altB - altA;
+    const dArea = b.ancho * b.alto - a.ancho * a.alto;
+    if (Math.abs(dArea) > EPS) return dArea;
+    return Math.max(b.ancho, b.alto) - Math.max(a.ancho, a.alto);
+  });
+}
+
+// ─── MaxRects helpers ────────────────────────────────────────────────────────
+
+function intersectan(a, b) {
+  return a.x < b.x + b.ancho - EPS &&
+         a.x + a.ancho > b.x + EPS &&
+         a.y < b.y + b.alto - EPS &&
+         a.y + a.alto > b.y + EPS;
+}
+
+function contieneA(grande, chico) {
+  return chico.x >= grande.x - EPS &&
+         chico.y >= grande.y - EPS &&
+         chico.x + chico.ancho <= grande.x + grande.ancho + EPS &&
+         chico.y + chico.alto <= grande.y + grande.alto + EPS;
+}
+
+/**
+ * Divide un rectángulo libre alrededor de la zona ocupada por una pieza.
+ * Genera hasta 4 franjas (izquierda, derecha, arriba, abajo); solo las que
+ * tienen área positiva después del solapamiento.
+ * Si no hay solapamiento, devuelve el rectángulo intacto.
+ */
+function dividirLibre(libre, pieza) {
+  if (!intersectan(libre, pieza)) return [libre];
+
+  const nuevos = [];
+
+  // Franja izquierda
+  const anchoIzq = pieza.x - libre.x;
+  if (anchoIzq > EPS) {
+    nuevos.push({ x: libre.x, y: libre.y, ancho: anchoIzq, alto: libre.alto });
+  }
+  // Franja derecha
+  const xDerPieza = pieza.x + pieza.ancho;
+  const anchoDer = (libre.x + libre.ancho) - xDerPieza;
+  if (anchoDer > EPS) {
+    nuevos.push({ x: xDerPieza, y: libre.y, ancho: anchoDer, alto: libre.alto });
+  }
+  // Franja superior (Y menor = más arriba en pantalla)
+  const altoArr = pieza.y - libre.y;
+  if (altoArr > EPS) {
+    nuevos.push({ x: libre.x, y: libre.y, ancho: libre.ancho, alto: altoArr });
+  }
+  // Franja inferior
+  const yAbajoPieza = pieza.y + pieza.alto;
+  const altoAbaj = (libre.y + libre.alto) - yAbajoPieza;
+  if (altoAbaj > EPS) {
+    nuevos.push({ x: libre.x, y: yAbajoPieza, ancho: libre.ancho, alto: altoAbaj });
+  }
+
+  return nuevos;
+}
+
+/**
+ * Elimina rectángulos que están completamente contenidos dentro de otro
+ * (serían redundantes porque el más grande ya cubre todas sus posiciones).
+ */
+function purgarContenidos(libres) {
+  return libres.filter((r, i) => {
+    for (let j = 0; j < libres.length; j++) {
+      if (i !== j && contieneA(libres[j], r)) return false;
+    }
+    return true;
   });
 }
 
 /**
- * Decide si una instancia entra en un espacio libre rectangular y en qué
- * orientación conviene colocarla. Cuando ambas orientaciones caben, se
- * prefiere la que consume más altura del espacio libre (deja menos espacio
- * desaprovechado abajo), lo que permite mezclar orientaciones de la misma
- * pieza y aprovechar mejor el remanente inferior de cada plancha.
- * @returns {'normal'|'rotada'|null}
+ * Busca la mejor ubicación para una instancia entre todos los rectángulos
+ * libres de todas las planchas. Criterio Bottom-Left: mínimo Y (más arriba
+ * posible), luego mínimo X (más a la izquierda); las planchas posteriores
+ * tienen penalización alta para rellenar primero la plancha actual.
+ * Cuando ambas orientaciones caben, prefiere la que deja menos remanente
+ * vertical (consume más altura del espacio, mejor compactación).
  */
-function elegirOrientacionParaEspacio(espacio, inst, kerf) {
-  const cabeNormal = inst.ancho + kerf <= espacio.ancho && inst.alto + kerf <= espacio.alto;
-  const cabeRotada = inst.alto + kerf <= espacio.ancho && inst.ancho + kerf <= espacio.alto;
-
-  if (!cabeNormal && !cabeRotada) return null;
-  if (cabeNormal && !cabeRotada) return 'normal';
-  if (!cabeNormal && cabeRotada) return 'rotada';
-
-  // Ambas caben: preferir la orientación donde la pieza ocupa más altura
-  // del espacio libre, dejando el menor remanente posible debajo.
-  // Cuando el remanente inferior es igual, se prefiere 'normal'.
-  const remanente_normal = espacio.alto - inst.alto;
-  const remanente_rotada = espacio.alto - inst.ancho;
-  return remanente_normal <= remanente_rotada ? 'normal' : 'rotada';
-}
-
-/**
- * Busca, entre todos los espacios libres de todas las planchas ya abiertas,
- * el más chico (por área) donde la instancia entre — best fit. Permite que
- * una pieza chica vuelva a una plancha anterior si ahí quedó lugar.
- * @param {Array<Array<{x:number,y:number,ancho:number,alto:number}>>} espaciosPorPlancha
- * @param {{ancho:number, alto:number}} inst
- * @param {number} kerf
- * @returns {{planchaIndex: number, espacioIndex: number, orientacion: 'normal'|'rotada'}|null}
- */
-function buscarMejorEspacio(espaciosPorPlancha, inst, kerf) {
+function buscarMejor(espaciosPorPlancha, inst, kerf) {
   let mejor = null;
-  let mejorArea = Infinity;
+  let mejorPuntaje = Infinity;
 
   for (let p = 0; p < espaciosPorPlancha.length; p++) {
-    const espacios = espaciosPorPlancha[p];
-    for (let e = 0; e < espacios.length; e++) {
-      const espacio = espacios[e];
-      const orientacion = elegirOrientacionParaEspacio(espacio, inst, kerf);
-      if (!orientacion) continue;
+    const libres = espaciosPorPlancha[p];
+    for (let e = 0; e < libres.length; e++) {
+      const libre = libres[e];
 
-      const area = espacio.ancho * espacio.alto;
-      if (area < mejorArea) {
-        mejorArea = area;
-        mejor = { planchaIndex: p, espacioIndex: e, orientacion };
+      const cabeN = inst.ancho + kerf <= libre.ancho && inst.alto + kerf <= libre.alto;
+      const cabeR = inst.alto  + kerf <= libre.ancho && inst.ancho + kerf <= libre.alto;
+      if (!cabeN && !cabeR) continue;
+
+      // Puntaje Bottom-Left: penalizar planchas tardías > altura > columna
+      const puntaje = p * 1e12 + libre.y * 1e6 + libre.x;
+      if (puntaje >= mejorPuntaje) continue;
+
+      // Orientación: preferir la que deja menos remanente en Y
+      let orientacion;
+      if (cabeN && cabeR) {
+        const remN = libre.alto - inst.alto - kerf;
+        const remR = libre.alto - inst.ancho - kerf;
+        orientacion = remN <= remR ? 'normal' : 'rotada';
+      } else {
+        orientacion = cabeN ? 'normal' : 'rotada';
       }
+
+      mejorPuntaje = puntaje;
+      mejor = { planchaIndex: p, espacioIndex: e, orientacion };
     }
   }
 
@@ -94,59 +146,50 @@ function buscarMejorEspacio(espaciosPorPlancha, inst, kerf) {
 }
 
 /**
- * Ubica una instancia dentro del espacio libre indicado y aplica el corte
- * guillotine: el espacio usado se reemplaza por dos espacios nuevos, uno a
- * la derecha de la pieza (alto limitado a la pieza) y uno abajo que ocupa
- * todo el ancho original del espacio. Esto hace que el espacio libre se
- * acumule siempre hacia abajo de la plancha en vez de quedar disperso.
- * @param {Array<Array<object>>} espaciosPorPlancha
- * @param {{planchaIndex: number, espacioIndex: number, orientacion: string}} ubicacion
- * @param {object} inst
- * @param {number} kerf
- * @param {Array} ubicadas
+ * Coloca una instancia en el rectángulo libre indicado y actualiza la lista
+ * de rectángulos libres de esa plancha con el algoritmo MaxRects:
+ * divide TODOS los rectángulos que se superponen con la zona ocupada y luego
+ * purga los que quedan contenidos en otro.
  */
 function colocarEnEspacio(espaciosPorPlancha, ubicacion, inst, kerf, ubicadas) {
   const { planchaIndex, espacioIndex, orientacion } = ubicacion;
-  const espacios = espaciosPorPlancha[planchaIndex];
-  const espacio = espacios[espacioIndex];
+  const libre = espaciosPorPlancha[planchaIndex][espacioIndex];
 
   const rotada = orientacion === 'rotada';
   const ancho = rotada ? inst.alto : inst.ancho;
-  const alto = rotada ? inst.ancho : inst.alto;
+  const alto  = rotada ? inst.ancho : inst.alto;
 
   ubicadas.push({
     plancha: planchaIndex,
     piezaId: inst.piezaId,
     nombre: inst.nombre,
-    x: espacio.x,
-    y: espacio.y,
+    x: libre.x,
+    y: libre.y,
     ancho,
     alto,
     rotada
   });
 
-  espacios.splice(espacioIndex, 1);
+  // La zona ocupada incluye el kerf para reservar la sangría de corte
+  const zona = { x: libre.x, y: libre.y, ancho: ancho + kerf, alto: alto + kerf };
 
-  const anchoDerecha = espacio.ancho - ancho - kerf;
-  const altoDerecha = alto + kerf;
-  if (anchoDerecha > EPS && altoDerecha > EPS) {
-    espacios.push({ x: espacio.x + ancho + kerf, y: espacio.y, ancho: anchoDerecha, alto: altoDerecha });
+  // Dividir todos los rectángulos libres de esta plancha
+  const nuevosLibres = [];
+  for (const r of espaciosPorPlancha[planchaIndex]) {
+    nuevosLibres.push(...dividirLibre(r, zona));
   }
 
-  const altoAbajo = espacio.alto - alto - kerf;
-  if (altoAbajo > EPS && espacio.ancho > EPS) {
-    espacios.push({ x: espacio.x, y: espacio.y + alto + kerf, ancho: espacio.ancho, alto: altoAbajo });
-  }
+  espaciosPorPlancha[planchaIndex] = purgarContenidos(nuevosLibres);
 }
 
+// ─── API pública ─────────────────────────────────────────────────────────────
+
 /**
- * Ubica todas las piezas de una lista de piezas (con cantidad) dentro de
- * planchas del tamaño indicado, usando Guillotine Bin Packing con best-fit
- * y rotación de 90° cuando ayuda.
+ * Ubica todas las piezas dentro de planchas del tamaño indicado usando
+ * MaxRects Bin Packing con Bottom-Left Fit y rotación de 90°.
  * @param {Array} piezas - modelo estándar {id, nombre, cantidad, ancho, alto, material}
  * @param {{ancho: number, alto: number}} plancha
- * @param {number} [kerf=0] - sangría de corte láser en mm; se reserva entre
- *   piezas pero no se incluye en las coordenadas/medidas del resultado.
+ * @param {number} [kerf=0] - sangría de corte láser en mm
  * @returns {{ubicadas: Array, noUbicadas: Array, totalPlanchas: number}}
  */
 export function calcularNesting(piezas, plancha, kerf = 0) {
@@ -155,7 +198,6 @@ export function calcularNesting(piezas, plancha, kerf = 0) {
   }
 
   const kerfEfectivo = kerf > 0 ? kerf : 0;
-
   const instancias = expandirInstancias(piezas);
   ordenarInstancias(instancias);
 
@@ -169,7 +211,7 @@ export function calcularNesting(piezas, plancha, kerf = 0) {
   }
 
   instancias.forEach(inst => {
-    // Si ni siquiera entra sola en una plancha vacía, es imposible ubicarla.
+    // Verificar si la pieza puede entrar en alguna plancha (sin considerar kerf)
     const entraNormal = inst.ancho <= plancha.ancho && inst.alto <= plancha.alto;
     const entraRotada = inst.alto <= plancha.ancho && inst.ancho <= plancha.alto;
     if (!entraNormal && !entraRotada) {
@@ -177,35 +219,28 @@ export function calcularNesting(piezas, plancha, kerf = 0) {
       return;
     }
 
-    // 1. Buscar el espacio libre más chico (best fit) entre todas las
-    // planchas ya abiertas, para rellenar huecos antes de abrir una nueva.
-    const mejor = buscarMejorEspacio(espaciosPorPlancha, inst, kerfEfectivo);
+    // Buscar en todas las planchas abiertas (Bottom-Left Fit)
+    const mejor = buscarMejor(espaciosPorPlancha, inst, kerfEfectivo);
     if (mejor) {
       colocarEnEspacio(espaciosPorPlancha, mejor, inst, kerfEfectivo, ubicadas);
       return;
     }
 
-    // 2. No entra en ninguna plancha existente: abrir una nueva, si el kerf
-    // no hace que la pieza deje de entrar en una plancha vacía.
-    const entraEnPlanchaVacia =
+    // No entra en ninguna plancha existente: abrir una nueva
+    const entraEnVacia =
       (inst.ancho + kerfEfectivo <= plancha.ancho && inst.alto + kerfEfectivo <= plancha.alto) ||
-      (inst.alto + kerfEfectivo <= plancha.ancho && inst.ancho + kerfEfectivo <= plancha.alto);
+      (inst.alto  + kerfEfectivo <= plancha.ancho && inst.ancho + kerfEfectivo <= plancha.alto);
 
-    if (!entraEnPlanchaVacia) {
+    if (!entraEnVacia) {
       noUbicadas.push({ piezaId: inst.piezaId, nombre: inst.nombre, ancho: inst.ancho, alto: inst.alto });
       return;
     }
 
-    const nuevoIndex = abrirPlanchaNueva();
-    const espacioInicial = espaciosPorPlancha[nuevoIndex][0];
-    const orientacion = elegirOrientacionParaEspacio(espacioInicial, inst, kerfEfectivo);
-    colocarEnEspacio(
-      espaciosPorPlancha,
-      { planchaIndex: nuevoIndex, espacioIndex: 0, orientacion },
-      inst,
-      kerfEfectivo,
-      ubicadas
-    );
+    abrirPlanchaNueva();
+    const mejorNueva = buscarMejor(espaciosPorPlancha, inst, kerfEfectivo);
+    if (mejorNueva) {
+      colocarEnEspacio(espaciosPorPlancha, mejorNueva, inst, kerfEfectivo, ubicadas);
+    }
   });
 
   return {
