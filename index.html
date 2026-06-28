@@ -34,7 +34,10 @@
       <!-- FIJO: acciones + mensajes, siempre visibles -->
       <div class="panel-fijo">
         <div class="acciones-principales">
-          <button id="btn-calcular" class="btn btn-acento btn-grande btn-block">Calcular nesting</button>
+          <div class="acciones-fila">
+            <button id="btn-calcular" class="btn btn-acento">Calcular nesting</button>
+            <button id="btn-limpiar" class="btn btn-secundario">Limpiar todo</button>
+          </div>
           <div id="progreso-irregular" class="progreso-irregular oculto">
             <div class="progreso-barra-fondo">
               <div id="progreso-barra-relleno" class="progreso-barra-relleno" style="width: 0%"></div>
@@ -44,7 +47,6 @@
               <button type="button" id="btn-detener-irregular" class="btn btn-secundario">Detener</button>
             </div>
           </div>
-          <button id="btn-limpiar" class="btn btn-secundario btn-block">Limpiar todo</button>
         </div>
         <div id="area-mensajes" class="area-mensajes" role="status" aria-live="polite">
           <p class="texto-vacio">Sin mensajes.</p>
@@ -57,26 +59,25 @@
         <!-- 1. Configuración de plancha -->
         <fieldset class="bloque">
           <legend>Configuración de plancha</legend>
-          <div class="campo-grupo campo-grupo--doble">
+          <div class="campo-grupo campo-grupo--cuatro">
             <div>
               <label for="plancha-ancho">Ancho (mm)</label>
-              <input type="number" id="plancha-ancho" min="1" step="1" value="1220" inputmode="numeric">
+              <input type="number" id="plancha-ancho" min="1" step="1" value="400" inputmode="numeric">
             </div>
             <div>
               <label for="plancha-alto">Alto (mm)</label>
-              <input type="number" id="plancha-alto" min="1" step="1" value="2440" inputmode="numeric">
+              <input type="number" id="plancha-alto" min="1" step="1" value="400" inputmode="numeric">
+            </div>
+            <div>
+              <label for="plancha-kerf">Sangría (mm)</label>
+              <input type="number" id="plancha-kerf" min="0" step="0.01" value="0.2" inputmode="decimal">
+            </div>
+            <div>
+              <label for="margen-general">Margen (mm)</label>
+              <input type="number" id="margen-general" min="0" step="1" value="0" inputmode="numeric">
             </div>
           </div>
-          <div class="campo-grupo">
-            <label for="plancha-kerf">Kerf / sangría (mm)</label>
-            <input type="number" id="plancha-kerf" min="0" step="0.01" value="0.2" inputmode="decimal">
-            <p class="texto-ayuda">Espacio entre piezas por el grosor del corte láser. Típico: 0.1–0.3mm</p>
-          </div>
-          <div class="campo-grupo">
-            <label for="margen-general">Margen de borde (mm)</label>
-            <input type="number" id="margen-general" min="0" step="1" value="0" inputmode="numeric">
-            <p class="texto-ayuda">Espacio libre en los bordes de cada plancha.</p>
-          </div>
+          <p class="texto-ayuda">Sangría: grosor del corte (típico 0.1–0.3mm). Margen: espacio libre en los bordes.</p>
           <div class="campo-grupo">
             <label class="checkbox-label">
               <input type="checkbox" id="margen-personalizado">
@@ -135,16 +136,17 @@
           <p class="texto-ayuda">Formatos soportados: CSV, Excel (.xlsx/.xls), SVG, DXF.</p>
           <p id="nombre-archivo" class="texto-ayuda texto-ayuda--archivo"></p>
           <div id="dxf-unidad-grupo" class="campo-grupo oculto">
-            <label for="dxf-unidad">¿En qué unidad está guardado el archivo?</label>
+            <label for="dxf-unidad">¿En qué unidad están las piezas?</label>
             <select id="dxf-unidad">
-              <option value="auto">Leer del archivo automáticamente</option>
+              <option value="auto">Detectar automáticamente</option>
               <option value="mm">Milímetros (mm)</option>
               <option value="cm">Centímetros (cm)</option>
               <option value="in">Pulgadas (in)</option>
             </select>
-            <p class="texto-ayuda">Si las piezas quedan 10× más chicas de lo esperado, el archivo probablemente está en CM aunque el encabezado diga MM — elegí "Centímetros".</p>
-            <p class="texto-ayuda texto-ayuda--dxf-hint">Si las formas son irregulares (L, U, canales, curvas) usá el modo <strong>Irregular</strong> en Configuración de plancha — SVGnest las ubica por su contorno real. En modo Rectangular cada pieza ocupa su rectángulo envolvente.</p>
-            <p class="texto-ayuda texto-ayuda--dxf-hint">Si alguna forma no aparece importada, verificá que en tu CAD estén exportadas como LWPOLYLINE cerrada (en AutoCAD: PEDIT → Join antes de exportar).</p>
+            <button type="button" id="btn-importar-dxf" class="btn btn-secundario btn-block" style="margin-top:0.55rem">Importar DXF</button>
+            <p class="texto-ayuda">Si las medidas quedan incorrectas (piezas muy chicas o muy grandes), cambiá la unidad y presioná <strong>Importar DXF</strong> de nuevo.</p>
+            <p class="texto-ayuda texto-ayuda--dxf-hint">Formas irregulares (L, U, canales, curvas): usá el modo <strong>Irregular</strong> — SVGnest las ubica por su contorno real.</p>
+            <p class="texto-ayuda texto-ayuda--dxf-hint">Si una forma no aparece: en AutoCAD hacé PEDIT → Join para convertirla a LWPOLYLINE cerrada antes de exportar.</p>
           </div>
         </fieldset>
 
@@ -190,7 +192,7 @@
                   <th>Nombre</th>
                   <th>Cant.</th>
                   <th>Medidas</th>
-                  <th>Material</th>
+                  <th class="col-material">Material</th>
                   <th></th>
                 </tr>
               </thead>

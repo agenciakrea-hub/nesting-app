@@ -403,6 +403,21 @@ input::placeholder {
   gap: 0.5rem;
 }
 
+.acciones-fila {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.acciones-fila .btn {
+  flex: 1;
+  padding: 0.65rem 0.5rem;
+}
+
+/* Material column: hide when table has .sin-material */
+.tabla-piezas.sin-material .col-material {
+  display: none;
+}
+
 /* ===================== Tabla de piezas ===================== */
 .tabla-piezas-wrap {
   flex: 1;
@@ -504,17 +519,38 @@ input::placeholder {
 
 /* ===================== Divisor de paneles (arrastrable) ===================== */
 .panel-divisor {
-  width: 5px;
+  width: 6px;
   flex-shrink: 0;
   background: var(--borde);
   cursor: col-resize;
   user-select: none;
   transition: background 0.1s ease;
   z-index: 10;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .panel-divisor:hover {
   background: var(--acento);
+}
+
+.panel-divisor::after {
+  content: '↔';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.7rem;
+  color: var(--texto-debil);
+  pointer-events: none;
+  white-space: nowrap;
+  transition: color 0.1s ease;
+}
+
+.panel-divisor:hover::after {
+  color: var(--acento-texto);
 }
 
 /* ===================== Exportar ===================== */
@@ -738,10 +774,12 @@ input::placeholder {
 }
 
 /* ===================== Botón flotante de ayuda ===================== */
+/* Asomado en la esquina inferior izquierda: solo se ve el rincón.
+   Al acercar el mouse emerge completamente. */
 .btn-ayuda {
   position: fixed;
-  bottom: 24px;
-  left: 24px;
+  bottom: 0;
+  left: 0;
   width: 52px;
   height: 52px;
   border-radius: 50%;
@@ -756,12 +794,16 @@ input::placeholder {
   justify-content: center;
   cursor: pointer;
   z-index: 1000;
-  box-shadow: 0 0 0 0 rgba(61, 220, 132, 0.55);
-  animation: pulso-ayuda 2.4s ease-in-out infinite;
+  transform: translate(-36px, 36px);
+  transition: transform 0.22s ease, background 0.1s ease;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
 }
 
-.btn-ayuda:hover {
+.btn-ayuda:hover,
+.btn-ayuda:focus {
+  transform: translate(10px, -10px);
   background: #4eeb95;
+  animation: pulso-ayuda 2.4s ease-in-out infinite;
 }
 
 @keyframes pulso-ayuda {

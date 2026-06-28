@@ -60,6 +60,30 @@ function manejarEliminarPieza(id) {
   mostrarMensaje('Pieza eliminada.', 'info');
 }
 
+let archivoDXFPendiente = null;
+let dxfYaImportado = false;
+
+function manejarArchivoSeleccionado(file) {
+  archivoDXFPendiente = file;
+  dxfYaImportado = false;
+  mostrarMensaje(`"${file.name}" listo. Elegí la unidad y presioná "Importar DXF".`, 'info');
+}
+
+async function manejarImportarDXF() {
+  if (!archivoDXFPendiente) {
+    mostrarMensaje('Seleccioná un archivo DXF primero.', 'error');
+    return;
+  }
+  dxfYaImportado = true;
+  await manejarImportarArchivo(archivoDXFPendiente);
+}
+
+function manejarCambiarUnidadDXF() {
+  if (dxfYaImportado && archivoDXFPendiente) {
+    mostrarMensaje('Cambiaste la unidad. Presioná "Importar DXF" de nuevo para recargar con la nueva unidad.', 'info');
+  }
+}
+
 async function manejarImportarArchivo(file) {
   try {
     const esDXF = file.name.toLowerCase().endsWith('.dxf');
@@ -287,6 +311,9 @@ inicializarUI({
   onCalcular: manejarCalcular,
   onLimpiarTodo: manejarLimpiarTodo,
   onImportarArchivo: manejarImportarArchivo,
+  onArchivoSeleccionado: manejarArchivoSeleccionado,
+  onImportarDXF: manejarImportarDXF,
+  onCambiarUnidadDXF: manejarCambiarUnidadDXF,
   onDescargar: manejarDescargar,
   onCambiarModoNesting: manejarCambiarModoNesting,
   onDetenerIrregular: manejarDetenerIrregular

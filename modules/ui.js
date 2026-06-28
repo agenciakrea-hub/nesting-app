@@ -29,6 +29,7 @@ function cachearRefs() {
   refs.nombreArchivo = document.getElementById('nombre-archivo');
   refs.dxfUnidadGrupo = document.getElementById('dxf-unidad-grupo');
   refs.dxfUnidad = document.getElementById('dxf-unidad');
+  refs.btnImportarDXF = document.getElementById('btn-importar-dxf');
 
   refs.listaPiezas = document.getElementById('lista-piezas');
   refs.piezasVacio = document.getElementById('piezas-vacio');
@@ -130,6 +131,10 @@ function limpiarFormularioPieza() {
 export function renderizarPiezas(piezas, onEliminar) {
   refs.listaPiezas.innerHTML = '';
 
+  const hayMaterial = piezas.some(p => p.material && p.material.trim());
+  const tabla = refs.listaPiezas.closest('.tabla-piezas');
+  if (tabla) tabla.classList.toggle('sin-material', !hayMaterial);
+
   if (piezas.length === 0) {
     refs.piezasVacio.style.display = 'block';
   } else {
@@ -149,6 +154,7 @@ export function renderizarPiezas(piezas, onEliminar) {
       tdMedidas.textContent = `${p.ancho} × ${p.alto} mm`;
 
       const tdMaterial = document.createElement('td');
+      tdMaterial.className = 'col-material';
       tdMaterial.textContent = p.material || '—';
 
       const tdAcciones = document.createElement('td');
@@ -172,8 +178,8 @@ export function renderizarPiezas(piezas, onEliminar) {
  * Limpia los campos de plancha a sus valores por defecto.
  */
 export function reiniciarCamposPlancha() {
-  refs.planchaAncho.value = 1220;
-  refs.planchaAlto.value = 2440;
+  refs.planchaAncho.value = 400;
+  refs.planchaAlto.value = 400;
   refs.planchaKerf.value = 0.2;
 }
 
@@ -829,8 +835,21 @@ export function inicializarUI(callbacks) {
     mostrarNombreArchivo(file.name);
     const ext = file.name.split('.').pop().toLowerCase();
     actualizarSelectorUnidadDXF(ext);
-    callbacks.onImportarArchivo(file);
+    if (ext === 'dxf') {
+      // DXF: mostrar selector y esperar confirmación manual
+      callbacks.onArchivoSeleccionado(file);
+    } else {
+      callbacks.onImportarArchivo(file);
+    }
     refs.inputArchivo.value = '';
+  });
+
+  refs.btnImportarDXF?.addEventListener('click', () => {
+    callbacks.onImportarDXF();
+  });
+
+  refs.dxfUnidad?.addEventListener('change', () => {
+    callbacks.onCambiarUnidadDXF?.();
   });
 
   refs.btnCalcular.addEventListener('click', () => {

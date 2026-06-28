@@ -428,7 +428,19 @@ export async function importarDesdeDXF(file, factorManual = null) {
     throw new Error('No se encontraron contornos cerrados en el DXF. Asegurate de exportar como LWPOLYLINE desde tu CAD.');
   }
 
-  return { piezas: piezasNuevas, omitidas: 0, unidadAplicada: etiquetaAplicada, unidadDeclarada };
+  // Agrupar piezas con mismo nombre y mismas dimensiones (suma cantidades)
+  const mapa = new Map();
+  for (const p of piezasNuevas) {
+    const clave = `${p.nombre}||${p.ancho}||${p.alto}`;
+    if (mapa.has(clave)) {
+      mapa.get(clave).cantidad++;
+    } else {
+      mapa.set(clave, { ...p });
+    }
+  }
+  const piezasMergeadas = Array.from(mapa.values());
+
+  return { piezas: piezasMergeadas, omitidas: 0, unidadAplicada: etiquetaAplicada, unidadDeclarada };
 }
 
 // ===================== Router de importación =====================
