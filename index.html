@@ -82,10 +82,10 @@
         <p id="nombre-archivo" class="texto-ayuda texto-ayuda--archivo"></p>
       </fieldset>
 
-      <!-- 3. Agregar pieza manualmente -->
-      <fieldset class="bloque">
-        <legend>Agregar pieza</legend>
-        <form id="form-pieza" autocomplete="off">
+      <!-- 3. Agregar pieza manualmente (plegable) -->
+      <details class="bloque bloque-plegable">
+        <summary class="bloque-summary">Agregar pieza manualmente</summary>
+        <form id="form-pieza" autocomplete="off" class="bloque-plegable-contenido">
           <div class="campo-grupo">
             <label for="pieza-nombre">Nombre de pieza</label>
             <input type="text" id="pieza-nombre" placeholder="Ej: Lateral A">
@@ -112,7 +112,7 @@
           </div>
           <button type="submit" class="btn btn-acento btn-block">Agregar pieza</button>
         </form>
-      </fieldset>
+      </details>
 
       <!-- 4. Lista de piezas cargadas -->
       <fieldset class="bloque bloque-piezas">
@@ -207,12 +207,6 @@
               <span class="indicador-valor mono" id="ind-kerf">Sangría: 0mm (sin sangría)</span>
             </div>
           </div>
-        </div>
-        <div id="canvas-controles" class="canvas-controles">
-          <button type="button" id="btn-zoom-in" class="btn-control-canvas" aria-label="Acercar">+</button>
-          <button type="button" id="btn-zoom-out" class="btn-control-canvas" aria-label="Alejar">&minus;</button>
-          <button type="button" id="btn-zoom-reset" class="btn-control-canvas" aria-label="Restablecer zoom" title="Restablecer zoom">&#10226;</button>
-          <button type="button" id="btn-pantalla-completa" class="btn-control-canvas" aria-label="Pantalla completa" title="Pantalla completa">&#9974;</button>
         </div>
         <div id="canvas-controles" class="canvas-controles">
           <button type="button" id="btn-zoom-in" class="btn-control-canvas" aria-label="Acercar">+</button>
