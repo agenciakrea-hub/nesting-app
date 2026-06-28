@@ -190,14 +190,25 @@ function colocarEnEspacio(espaciosPorPlancha, ubicacion, inst, kerf, ubicadas) {
  * @param {Array} piezas - modelo estándar {id, nombre, cantidad, ancho, alto, material}
  * @param {{ancho: number, alto: number}} plancha
  * @param {number} [kerf=0] - sangría de corte láser en mm
+ * @param {{arriba:number, derecha:number, abajo:number, izquierda:number}|null} [margen=null]
  * @returns {{ubicadas: Array, noUbicadas: Array, totalPlanchas: number}}
  */
-export function calcularNesting(piezas, plancha, kerf = 0) {
+export function calcularNesting(piezas, plancha, kerf = 0, margen = null) {
   if (!plancha || !(plancha.ancho > 0) || !(plancha.alto > 0)) {
     return { ubicadas: [], noUbicadas: [], totalPlanchas: 0 };
   }
 
   const kerfEfectivo = kerf > 0 ? kerf : 0;
+  const mg = margen || { arriba: 0, derecha: 0, abajo: 0, izquierda: 0 };
+  const areaX = mg.izquierda || 0;
+  const areaY = mg.arriba || 0;
+  const areaAncho = plancha.ancho - (mg.izquierda || 0) - (mg.derecha || 0);
+  const areaAlto  = plancha.alto  - (mg.arriba  || 0) - (mg.abajo  || 0);
+
+  if (!(areaAncho > 0) || !(areaAlto > 0)) {
+    return { ubicadas: [], noUbicadas: [], totalPlanchas: 0 };
+  }
+
   const instancias = expandirInstancias(piezas);
   ordenarInstancias(instancias);
 
@@ -206,7 +217,7 @@ export function calcularNesting(piezas, plancha, kerf = 0) {
   const espaciosPorPlancha = [];
 
   function abrirPlanchaNueva() {
-    espaciosPorPlancha.push([{ x: 0, y: 0, ancho: plancha.ancho, alto: plancha.alto }]);
+    espaciosPorPlancha.push([{ x: areaX, y: areaY, ancho: areaAncho, alto: areaAlto }]);
     return espaciosPorPlancha.length - 1;
   }
 

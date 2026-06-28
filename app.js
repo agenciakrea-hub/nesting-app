@@ -28,7 +28,8 @@ import {
   mostrarGrupoTiempoMaximo,
   ocultarGrupoTiempoMaximo,
   mostrarEstadoCalculandoIrregular,
-  obtenerFactorEscalaDXF
+  obtenerFactorEscalaDXF,
+  obtenerMargen
 } from './modules/ui.js';
 import { calcularNesting, calcularEstadisticas } from './modules/nesting.js';
 import { calcularNestingIrregular, detenerNestingIrregular, svgNestDisponible } from './modules/nesting-irregular.js';
@@ -67,11 +68,15 @@ async function manejarImportarArchivo(file) {
     refrescarLista();
     invalidarNesting();
     let mensaje = `Se importaron ${resultado.cantidadAgregadas} pieza(s) desde "${resultado.nombreArchivo}".`;
-    if (resultado.unidadDetectada) {
-      mensaje += ` Unidad: ${resultado.unidadDetectada}.`;
+    if (resultado.unidadAplicada) {
+      if (resultado.unidadDeclarada && resultado.unidadDeclarada !== resultado.unidadAplicada) {
+        mensaje += ` Medidas importadas como ${resultado.unidadAplicada} (el archivo declara ${resultado.unidadDeclarada}).`;
+      } else {
+        mensaje += ` Medidas en ${resultado.unidadAplicada}.`;
+      }
     }
     if (resultado.omitidas > 0) {
-      mensaje += ` Se omitieron ${resultado.omitidas} fila(s) por datos inválidos o vacíos.`;
+      mensaje += ` Se omitieron ${resultado.omitidas} contorno(s) abiertos o inválidos.`;
     }
     mostrarMensaje(mensaje, 'exito');
   } catch (err) {
@@ -113,7 +118,7 @@ function manejarCalcularRectangular() {
   if (!datos) return;
   const { piezas, plancha, kerf } = datos;
 
-  const resultado = calcularNesting(piezas, plancha, kerf);
+  const resultado = calcularNesting(piezas, plancha, kerf, obtenerMargen());
   const estadisticas = calcularEstadisticas(resultado.ubicadas, plancha);
   const totalPiezasOriginal = piezas.reduce((acc, p) => acc + p.cantidad, 0);
 
@@ -252,43 +257,18 @@ function sinNestingCalculado() {
   return true;
 }
 
-async function manejarExportarSVG() {
+async function manejarDescargar(formato) {
   if (sinNestingCalculado()) return;
   try {
-    await exportarSVG(window.ultimoNesting);
-    mostrarMensaje('SVG exportado correctamente', 'exito');
+    switch (formato) {
+      case 'svg':   await exportarSVG(window.ultimoNesting); break;
+      case 'dxf':   await exportarDXF(window.ultimoNesting); break;
+      case 'pdf':   exportarPDF(window.ultimoNesting);       break;
+      case 'excel': exportarExcel(window.ultimoNesting);     break;
+    }
+    mostrarMensaje(`${formato.toUpperCase()} descargado correctamente.`, 'exito');
   } catch (err) {
-    mostrarMensaje(`Error al exportar SVG: ${err.message}`, 'error');
-  }
-}
-
-async function manejarExportarDXF() {
-  if (sinNestingCalculado()) return;
-  try {
-    await exportarDXF(window.ultimoNesting);
-    mostrarMensaje('DXF exportado correctamente', 'exito');
-  } catch (err) {
-    mostrarMensaje(`Error al exportar DXF: ${err.message}`, 'error');
-  }
-}
-
-function manejarExportarPDF() {
-  if (sinNestingCalculado()) return;
-  try {
-    exportarPDF(window.ultimoNesting);
-    mostrarMensaje('PDF exportado correctamente', 'exito');
-  } catch (err) {
-    mostrarMensaje(`Error al exportar PDF: ${err.message}`, 'error');
-  }
-}
-
-function manejarExportarExcel() {
-  if (sinNestingCalculado()) return;
-  try {
-    exportarExcel(window.ultimoNesting);
-    mostrarMensaje('Excel exportado correctamente', 'exito');
-  } catch (err) {
-    mostrarMensaje(`Error al exportar Excel: ${err.message}`, 'error');
+    mostrarMensaje(`Error al exportar: ${err.message}`, 'error');
   }
 }
 
@@ -307,13 +287,42 @@ inicializarUI({
   onCalcular: manejarCalcular,
   onLimpiarTodo: manejarLimpiarTodo,
   onImportarArchivo: manejarImportarArchivo,
-  onExportarSVG: manejarExportarSVG,
-  onExportarDXF: manejarExportarDXF,
-  onExportarPDF: manejarExportarPDF,
-  onExportarExcel: manejarExportarExcel,
+  onDescargar: manejarDescargar,
   onCambiarModoNesting: manejarCambiarModoNesting,
   onDetenerIrregular: manejarDetenerIrregular
 });
+
+// Divisor arrastrable entre panel izquierdo y panel derecho
+(function() {
+  const divisor = document.getElementById('panel-divisor');
+  const panelIzq = document.querySelector('.panel-izquierdo');
+  const layout = document.querySelector('.layout');
+  if (!divisor || !panelIzq || !layout) return;
+
+  let arrastrando = false;
+
+  divisor.addEventListener('mousedown', () => {
+    arrastrando = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!arrastrando) return;
+    const rect = layout.getBoundingClientRect();
+    let pct = ((e.clientX - rect.left) / rect.width) * 100;
+    // Mínimo 25% (izq) para no colapsar la lista, máximo 65% para que el canvas sea usable
+    pct = Math.max(25, Math.min(65, pct));
+    panelIzq.style.width = `${pct}%`;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
 
 // El modo irregular depende de SVGnest (lib/svgnest/); si no cargó bien,
 // se deshabilita esa opción y queda disponible solo el modo rectangular.

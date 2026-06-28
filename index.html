@@ -31,158 +31,198 @@
     <!-- ===================== PANEL IZQUIERDO ===================== -->
     <section class="panel panel-izquierdo">
 
-      <!-- 1. Configuración de plancha -->
-      <fieldset class="bloque">
-        <legend>Configuración de plancha</legend>
-        <div class="campo-grupo">
-          <label for="plancha-ancho">Ancho de plancha (mm)</label>
-          <input type="number" id="plancha-ancho" min="1" step="1" value="1220" inputmode="numeric">
-        </div>
-        <div class="campo-grupo">
-          <label for="plancha-alto">Alto de plancha (mm)</label>
-          <input type="number" id="plancha-alto" min="1" step="1" value="2440" inputmode="numeric">
-        </div>
-        <div class="campo-grupo">
-          <label for="plancha-kerf">Kerf / sangría (mm)</label>
-          <input type="number" id="plancha-kerf" min="0" step="0.01" value="0.2" inputmode="decimal">
-          <p class="texto-ayuda">Espacio entre piezas por el grosor del corte láser. Típico: 0.1–0.3mm</p>
-        </div>
-        <div class="campo-grupo">
-          <label>Modo de nesting</label>
-          <div class="modo-nesting-opciones">
-            <label class="modo-nesting-opcion">
-              <input type="radio" name="modo-nesting" id="modo-rectangular" value="rectangular" checked>
-              Rectangular (rápido)
-            </label>
-            <label class="modo-nesting-opcion">
-              <input type="radio" name="modo-nesting" id="modo-irregular" value="irregular">
-              Irregular (lento, formas reales)
-            </label>
-          </div>
-          <p id="modo-irregular-aviso" class="texto-ayuda texto-ayuda--error oculto"></p>
-        </div>
-        <div id="tiempo-maximo-grupo" class="campo-grupo oculto">
-          <label for="tiempo-maximo">Tiempo máximo (segundos)</label>
-          <select id="tiempo-maximo">
-            <option value="30">30</option>
-            <option value="60" selected>60</option>
-            <option value="120">120</option>
-            <option value="300">300</option>
-          </select>
-          <p class="texto-ayuda">El cálculo se detiene solo al llegar a este tiempo y muestra el mejor resultado encontrado.</p>
-        </div>
-      </fieldset>
-
-      <!-- 2. Importar archivo -->
-      <fieldset class="bloque">
-        <legend>Importar archivo</legend>
-        <input type="file" id="input-archivo" accept=".csv,.xlsx,.xls,.svg,.dxf" class="input-archivo-oculto">
-        <button type="button" id="btn-importar" class="btn btn-secundario btn-block">Seleccionar archivo</button>
-        <p class="texto-ayuda">Formatos soportados: CSV, Excel (.xlsx/.xls), SVG, DXF.</p>
-        <p id="nombre-archivo" class="texto-ayuda texto-ayuda--archivo"></p>
-        <div id="dxf-unidad-grupo" class="campo-grupo oculto">
-          <label for="dxf-unidad">Unidad del DXF</label>
-          <select id="dxf-unidad">
-            <option value="auto">Automático (leer del archivo)</option>
-            <option value="mm">mm — milímetros</option>
-            <option value="cm">cm → mm (×10)</option>
-            <option value="in">pulgadas → mm (×25.4)</option>
-          </select>
-          <p class="texto-ayuda">Si las piezas importadas salen 10× más chicas de lo esperado, el archivo probablemente está en cm: elegí "cm → mm".</p>
-        </div>
-      </fieldset>
-
-      <!-- 3. Agregar pieza manualmente (plegable) -->
-      <details class="bloque bloque-plegable">
-        <summary class="bloque-summary">Agregar pieza manualmente</summary>
-        <form id="form-pieza" autocomplete="off" class="bloque-plegable-contenido">
-          <div class="campo-grupo">
-            <label for="pieza-nombre">Nombre de pieza</label>
-            <input type="text" id="pieza-nombre" placeholder="Ej: Lateral A">
-          </div>
-          <div class="campo-grupo campo-grupo--doble">
-            <div>
-              <label for="pieza-cantidad">Cantidad</label>
-              <input type="number" id="pieza-cantidad" min="1" step="1" value="1" inputmode="numeric">
+      <!-- FIJO: acciones + mensajes, siempre visibles -->
+      <div class="panel-fijo">
+        <div class="acciones-principales">
+          <button id="btn-calcular" class="btn btn-acento btn-grande btn-block">Calcular nesting</button>
+          <div id="progreso-irregular" class="progreso-irregular oculto">
+            <div class="progreso-barra-fondo">
+              <div id="progreso-barra-relleno" class="progreso-barra-relleno" style="width: 0%"></div>
             </div>
-            <div>
-              <label for="pieza-material">Material (opcional)</label>
-              <input type="text" id="pieza-material" placeholder="Ej: MDF 9mm">
+            <div class="progreso-fila">
+              <span id="progreso-texto" class="progreso-texto mono">0%</span>
+              <button type="button" id="btn-detener-irregular" class="btn btn-secundario">Detener</button>
             </div>
           </div>
-          <div class="campo-grupo campo-grupo--doble">
-            <div>
-              <label for="pieza-ancho">Ancho (mm)</label>
-              <input type="number" id="pieza-ancho" min="0.1" step="0.1" inputmode="decimal">
-            </div>
-            <div>
-              <label for="pieza-alto">Alto (mm)</label>
-              <input type="number" id="pieza-alto" min="0.1" step="0.1" inputmode="decimal">
-            </div>
-          </div>
-          <button type="submit" class="btn btn-acento btn-block">Agregar pieza</button>
-        </form>
-      </details>
-
-      <!-- 4. Lista de piezas cargadas -->
-      <fieldset class="bloque bloque-piezas">
-        <legend>Piezas cargadas</legend>
-        <div class="tabla-piezas-wrap">
-          <table class="tabla-piezas">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Cant.</th>
-                <th>Medidas</th>
-                <th>Material</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="lista-piezas">
-              <!-- filas generadas dinámicamente -->
-            </tbody>
-          </table>
-          <p id="piezas-vacio" class="texto-vacio">No hay piezas cargadas todavía.</p>
+          <button id="btn-limpiar" class="btn btn-secundario btn-block">Limpiar todo</button>
         </div>
-        <div class="contador-piezas">
-          Total de piezas: <span id="contador-total" class="mono">0</span>
-        </div>
-      </fieldset>
-
-      <!-- 5. Acciones principales -->
-      <div class="bloque acciones-principales">
-        <button id="btn-calcular" class="btn btn-acento btn-grande btn-block">Calcular nesting</button>
-        <div id="progreso-irregular" class="progreso-irregular oculto">
-          <div class="progreso-barra-fondo">
-            <div id="progreso-barra-relleno" class="progreso-barra-relleno" style="width: 0%"></div>
-          </div>
-          <div class="progreso-fila">
-            <span id="progreso-texto" class="progreso-texto mono">0%</span>
-            <button type="button" id="btn-detener-irregular" class="btn btn-secundario">Detener</button>
-          </div>
-        </div>
-        <button id="btn-limpiar" class="btn btn-secundario btn-block">Limpiar todo</button>
-      </div>
-
-      <!-- 6. Área de mensajes -->
-      <div class="bloque">
         <div id="area-mensajes" class="area-mensajes" role="status" aria-live="polite">
           <p class="texto-vacio">Sin mensajes.</p>
         </div>
       </div>
 
+      <!-- DESPLAZABLE: configuración, importar, piezas -->
+      <div class="panel-scroll">
+
+        <!-- 1. Configuración de plancha -->
+        <fieldset class="bloque">
+          <legend>Configuración de plancha</legend>
+          <div class="campo-grupo campo-grupo--doble">
+            <div>
+              <label for="plancha-ancho">Ancho (mm)</label>
+              <input type="number" id="plancha-ancho" min="1" step="1" value="1220" inputmode="numeric">
+            </div>
+            <div>
+              <label for="plancha-alto">Alto (mm)</label>
+              <input type="number" id="plancha-alto" min="1" step="1" value="2440" inputmode="numeric">
+            </div>
+          </div>
+          <div class="campo-grupo">
+            <label for="plancha-kerf">Kerf / sangría (mm)</label>
+            <input type="number" id="plancha-kerf" min="0" step="0.01" value="0.2" inputmode="decimal">
+            <p class="texto-ayuda">Espacio entre piezas por el grosor del corte láser. Típico: 0.1–0.3mm</p>
+          </div>
+          <div class="campo-grupo">
+            <label for="margen-general">Margen de borde (mm)</label>
+            <input type="number" id="margen-general" min="0" step="1" value="0" inputmode="numeric">
+            <p class="texto-ayuda">Espacio libre en los bordes de cada plancha.</p>
+          </div>
+          <div class="campo-grupo">
+            <label class="checkbox-label">
+              <input type="checkbox" id="margen-personalizado">
+              Personalizar margen por lado
+            </label>
+          </div>
+          <div id="margen-lados-grupo" class="campo-grupo campo-grupo--cuatro oculto">
+            <div>
+              <label for="margen-arriba">Arriba</label>
+              <input type="number" id="margen-arriba" min="0" step="1" value="0" inputmode="numeric">
+            </div>
+            <div>
+              <label for="margen-derecha">Derecha</label>
+              <input type="number" id="margen-derecha" min="0" step="1" value="0" inputmode="numeric">
+            </div>
+            <div>
+              <label for="margen-abajo">Abajo</label>
+              <input type="number" id="margen-abajo" min="0" step="1" value="0" inputmode="numeric">
+            </div>
+            <div>
+              <label for="margen-izquierda">Izquierda</label>
+              <input type="number" id="margen-izquierda" min="0" step="1" value="0" inputmode="numeric">
+            </div>
+          </div>
+          <div class="campo-grupo">
+            <label>Modo de nesting</label>
+            <div class="modo-nesting-opciones">
+              <label class="modo-nesting-opcion">
+                <input type="radio" name="modo-nesting" id="modo-rectangular" value="rectangular" checked>
+                Rectangular (rápido)
+              </label>
+              <label class="modo-nesting-opcion">
+                <input type="radio" name="modo-nesting" id="modo-irregular" value="irregular">
+                Irregular (lento, formas reales)
+              </label>
+            </div>
+            <p id="modo-irregular-aviso" class="texto-ayuda texto-ayuda--error oculto"></p>
+          </div>
+          <div id="tiempo-maximo-grupo" class="campo-grupo oculto">
+            <label for="tiempo-maximo">Tiempo máximo (segundos)</label>
+            <select id="tiempo-maximo">
+              <option value="30">30</option>
+              <option value="60" selected>60</option>
+              <option value="120">120</option>
+              <option value="300">300</option>
+            </select>
+            <p class="texto-ayuda">El cálculo se detiene al llegar a este tiempo y muestra el mejor resultado encontrado.</p>
+          </div>
+        </fieldset>
+
+        <!-- 2. Importar archivo -->
+        <fieldset class="bloque">
+          <legend>Importar archivo</legend>
+          <input type="file" id="input-archivo" accept=".csv,.xlsx,.xls,.svg,.dxf" class="input-archivo-oculto">
+          <button type="button" id="btn-importar" class="btn btn-secundario btn-block">Seleccionar archivo</button>
+          <p class="texto-ayuda">Formatos soportados: CSV, Excel (.xlsx/.xls), SVG, DXF.</p>
+          <p id="nombre-archivo" class="texto-ayuda texto-ayuda--archivo"></p>
+          <div id="dxf-unidad-grupo" class="campo-grupo oculto">
+            <label for="dxf-unidad">¿En qué unidad está guardado el archivo?</label>
+            <select id="dxf-unidad">
+              <option value="auto">Leer del archivo automáticamente</option>
+              <option value="mm">Milímetros (mm)</option>
+              <option value="cm">Centímetros (cm)</option>
+              <option value="in">Pulgadas (in)</option>
+            </select>
+            <p class="texto-ayuda">Si las piezas quedan 10× más chicas de lo esperado, el archivo probablemente está en CM aunque el encabezado diga MM — elegí "Centímetros".</p>
+            <p class="texto-ayuda texto-ayuda--dxf-hint">Si las formas son irregulares (L, U, canales, curvas) usá el modo <strong>Irregular</strong> en Configuración de plancha — SVGnest las ubica por su contorno real. En modo Rectangular cada pieza ocupa su rectángulo envolvente.</p>
+            <p class="texto-ayuda texto-ayuda--dxf-hint">Si alguna forma no aparece importada, verificá que en tu CAD estén exportadas como LWPOLYLINE cerrada (en AutoCAD: PEDIT → Join antes de exportar).</p>
+          </div>
+        </fieldset>
+
+        <!-- 3. Agregar pieza manualmente (plegable) -->
+        <details class="bloque bloque-plegable">
+          <summary class="bloque-summary">Agregar pieza manualmente</summary>
+          <form id="form-pieza" autocomplete="off" class="bloque-plegable-contenido">
+            <div class="campo-grupo">
+              <label for="pieza-nombre">Nombre de pieza</label>
+              <input type="text" id="pieza-nombre" placeholder="Ej: Lateral A">
+            </div>
+            <div class="campo-grupo campo-grupo--doble">
+              <div>
+                <label for="pieza-cantidad">Cantidad</label>
+                <input type="number" id="pieza-cantidad" min="1" step="1" value="1" inputmode="numeric">
+              </div>
+              <div>
+                <label for="pieza-material">Material (opcional)</label>
+                <input type="text" id="pieza-material" placeholder="Ej: MDF 9mm">
+              </div>
+            </div>
+            <div class="campo-grupo campo-grupo--doble">
+              <div>
+                <label for="pieza-ancho">Ancho (mm)</label>
+                <input type="number" id="pieza-ancho" min="0.1" step="0.1" inputmode="decimal">
+              </div>
+              <div>
+                <label for="pieza-alto">Alto (mm)</label>
+                <input type="number" id="pieza-alto" min="0.1" step="0.1" inputmode="decimal">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-acento btn-block">Agregar pieza</button>
+          </form>
+        </details>
+
+        <!-- 4. Lista de piezas cargadas -->
+        <fieldset class="bloque bloque-piezas">
+          <legend>Piezas cargadas</legend>
+          <div class="tabla-piezas-wrap">
+            <table class="tabla-piezas">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Cant.</th>
+                  <th>Medidas</th>
+                  <th>Material</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="lista-piezas">
+                <!-- filas generadas dinámicamente -->
+              </tbody>
+            </table>
+            <p id="piezas-vacio" class="texto-vacio">No hay piezas cargadas todavía.</p>
+          </div>
+          <div class="contador-piezas">
+            Total de piezas: <span id="contador-total" class="mono">0</span>
+          </div>
+        </fieldset>
+
+      </div><!-- /panel-scroll -->
+
     </section>
+
+    <!-- Divisor arrastrable entre paneles -->
+    <div id="panel-divisor" class="panel-divisor" title="Arrastrar para redimensionar"></div>
 
     <!-- ===================== PANEL DERECHO ===================== -->
     <section class="panel panel-derecho">
       <div id="seccion-exportar" class="bloque seccion-exportar oculto">
-        <span class="exportar-titulo">Exportar</span>
-        <div class="exportar-acciones">
-          <button type="button" id="btn-exportar-svg" class="btn btn-acento">SVG</button>
-          <button type="button" id="btn-exportar-dxf" class="btn btn-secundario">DXF</button>
-          <button type="button" id="btn-exportar-pdf" class="btn btn-secundario">PDF</button>
-          <button type="button" id="btn-exportar-excel" class="btn btn-secundario">Excel</button>
+        <span class="exportar-titulo">Exportar — seleccioná el formato y luego descargá</span>
+        <div class="exportar-formatos" id="exportar-formatos">
+          <button type="button" class="btn btn-formato" data-formato="svg">SVG</button>
+          <button type="button" class="btn btn-formato" data-formato="dxf">DXF</button>
+          <button type="button" class="btn btn-formato" data-formato="pdf">PDF</button>
+          <button type="button" class="btn btn-formato" data-formato="excel">Excel</button>
         </div>
+        <button type="button" id="btn-descargar" class="btn btn-acento btn-block" disabled>Descargar</button>
       </div>
       <div id="canvas-wrap" class="canvas-wrap">
         <header id="app-header" class="app-header">

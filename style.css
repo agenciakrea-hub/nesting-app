@@ -90,7 +90,27 @@ input, button, select {
   flex-shrink: 0;
   background: var(--bg-panel);
   border-right: 1px solid var(--borde);
-  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Zona fija (siempre visible): botones de acción + mensajes */
+.panel-fijo {
+  flex-shrink: 0;
+  padding: 0.85rem 1.25rem 0.75rem;
+  border-bottom: 2px solid var(--borde);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* Zona desplazable: configuración, importar, lista de piezas */
+.panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -117,10 +137,11 @@ fieldset.bloque {
 }
 
 .bloque legend {
-  font-size: 0.75rem;
+  font-size: 0.84rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--texto-tenue);
+  letter-spacing: 0.07em;
+  color: var(--texto);
   padding: 0 0.4rem;
 }
 
@@ -189,6 +210,27 @@ details.bloque-plegable[open] > .bloque-summary::after {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.65rem;
+}
+
+.campo-grupo--cuatro {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  color: var(--texto-tenue);
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  accent-color: var(--acento);
+  cursor: pointer;
+  width: auto;
 }
 
 label {
@@ -350,13 +392,15 @@ input::placeholder {
 .btn-grande {
   padding: 0.85rem 1rem;
   font-size: 1rem;
-  margin-bottom: 0.6rem;
 }
 
 .acciones-principales {
   background: transparent;
   border: none;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 /* ===================== Tabla de piezas ===================== */
@@ -458,6 +502,21 @@ input::placeholder {
   color: var(--texto-tenue);
 }
 
+/* ===================== Divisor de paneles (arrastrable) ===================== */
+.panel-divisor {
+  width: 5px;
+  flex-shrink: 0;
+  background: var(--borde);
+  cursor: col-resize;
+  user-select: none;
+  transition: background 0.1s ease;
+  z-index: 10;
+}
+
+.panel-divisor:hover {
+  background: var(--acento);
+}
+
 /* ===================== Exportar ===================== */
 .seccion-exportar {
   flex-shrink: 0;
@@ -471,18 +530,51 @@ input::placeholder {
   display: block;
   font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--texto-tenue);
   margin-bottom: 0.6rem;
 }
 
-.exportar-acciones {
+.exportar-formatos {
   display: flex;
-  gap: 0.6rem;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
 }
 
-.exportar-acciones .btn {
+.btn-formato {
   flex: 1;
+  padding: 0.55rem 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: var(--bg-base);
+  border: 1px solid var(--borde);
+  color: var(--texto-tenue);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: border-color 0.1s, color 0.1s, background 0.1s;
+}
+
+.btn-formato:hover {
+  border-color: var(--texto-tenue);
+  color: var(--texto);
+}
+
+.btn-formato.activo {
+  border-color: var(--acento);
+  color: var(--acento);
+  background: rgba(255, 122, 26, 0.08);
+}
+
+.btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.texto-ayuda--dxf-hint {
+  margin-top: 0.6rem;
+  border-left: 2px solid var(--borde);
+  padding-left: 0.5rem;
 }
 
 /* ===================== Canvas ===================== */
@@ -544,7 +636,7 @@ input::placeholder {
 .canvas-controles {
   position: absolute;
   z-index: 3;
-  top: 0.75rem;
+  bottom: 0.75rem;
   left: 0.75rem;
   display: flex;
   gap: 0.4rem;

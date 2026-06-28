@@ -267,15 +267,24 @@ const FACTOR_POR_INSUNITS = {
  * Lee el valor de $INSUNITS del encabezado DXF y devuelve el factor de
  * conversión a mm. Devuelve 1 si no se encuentra (tratar como mm).
  */
+const ETIQUETA_INSUNITS = { 1: 'pulgadas', 2: 'pies', 4: 'mm', 5: 'cm', 6: 'm' };
+
+/**
+ * Lee $INSUNITS del encabezado DXF.
+ * @returns {{ factor: number, declarada: string }}
+ */
 function leerFactorUnidadDXF(lineas) {
   for (let i = 0; i < lineas.length - 3; i += 2) {
     if (lineas[i] === '0' && lineas[i + 1] === 'ENDSEC') break;
     if (lineas[i] === '9' && lineas[i + 1] === '$INSUNITS' && lineas[i + 2] === '70') {
       const insunits = parseInt(lineas[i + 3], 10);
-      return FACTOR_POR_INSUNITS[insunits] ?? 1;
+      return {
+        factor: FACTOR_POR_INSUNITS[insunits] ?? 1,
+        declarada: ETIQUETA_INSUNITS[insunits] ?? 'desconocida'
+      };
     }
   }
-  return 1;
+  return { factor: 1, declarada: 'no declarada' };
 }
 
 /**
@@ -376,13 +385,13 @@ export async function importarDesdeDXF(file, factorManual = null) {
   const texto = await file.text();
   const lineas = texto.split(/\r?\n/).map(l => l.trim());
 
-  const factorAuto = leerFactorUnidadDXF(lineas);
+  const { factor: factorAuto, declarada: unidadDeclarada } = leerFactorUnidadDXF(lineas);
   const factor = factorManual !== null ? factorManual : factorAuto;
 
-  const etiquetaUnidad =
-    factor === 1 ? 'mm' :
-    factor === 10 ? 'cm → mm' :
-    factor === 25.4 ? 'pulgadas → mm' :
+  const etiquetaAplicada =
+    factor === 1    ? 'mm' :
+    factor === 10   ? 'cm' :
+    factor === 25.4 ? 'pulgadas' :
     `×${factor}`;
 
   const piezasNuevas = [];
@@ -419,7 +428,7 @@ export async function importarDesdeDXF(file, factorManual = null) {
     throw new Error('No se encontraron contornos cerrados en el DXF. Asegurate de exportar como LWPOLYLINE desde tu CAD.');
   }
 
-  return { piezas: piezasNuevas, omitidas: 0, unidadDetectada: etiquetaUnidad };
+  return { piezas: piezasNuevas, omitidas: 0, unidadAplicada: etiquetaAplicada, unidadDeclarada };
 }
 
 // ===================== Router de importación =====================
@@ -463,6 +472,7 @@ export async function importarArchivo(file, opciones = {}) {
     nombreArchivo,
     cantidadAgregadas: agregadas.length,
     omitidas: resultado.omitidas || 0,
-    unidadDetectada: resultado.unidadDetectada || null
+    unidadAplicada: resultado.unidadAplicada || null,
+    unidadDeclarada: resultado.unidadDeclarada || null
   };
 }

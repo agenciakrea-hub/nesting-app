@@ -16,6 +16,14 @@ function cachearRefs() {
   refs.planchaAlto = document.getElementById('plancha-alto');
   refs.planchaKerf = document.getElementById('plancha-kerf');
 
+  refs.margenGeneral = document.getElementById('margen-general');
+  refs.margenPersonalizado = document.getElementById('margen-personalizado');
+  refs.margenLadosGrupo = document.getElementById('margen-lados-grupo');
+  refs.margenArriba = document.getElementById('margen-arriba');
+  refs.margenDerecha = document.getElementById('margen-derecha');
+  refs.margenAbajo = document.getElementById('margen-abajo');
+  refs.margenIzquierda = document.getElementById('margen-izquierda');
+
   refs.inputArchivo = document.getElementById('input-archivo');
   refs.btnImportar = document.getElementById('btn-importar');
   refs.nombreArchivo = document.getElementById('nombre-archivo');
@@ -60,10 +68,8 @@ function cachearRefs() {
   refs.appHeader = document.getElementById('app-header');
 
   refs.seccionExportar = document.getElementById('seccion-exportar');
-  refs.btnExportarSVG = document.getElementById('btn-exportar-svg');
-  refs.btnExportarDXF = document.getElementById('btn-exportar-dxf');
-  refs.btnExportarPDF = document.getElementById('btn-exportar-pdf');
-  refs.btnExportarExcel = document.getElementById('btn-exportar-excel');
+  refs.exportarFormatos = document.getElementById('exportar-formatos');
+  refs.btnDescargar = document.getElementById('btn-descargar');
 
   refs.btnAyuda = document.getElementById('btn-ayuda');
   refs.modalAyuda = document.getElementById('modal-ayuda');
@@ -128,7 +134,8 @@ export function renderizarPiezas(piezas, onEliminar) {
     refs.piezasVacio.style.display = 'block';
   } else {
     refs.piezasVacio.style.display = 'none';
-    piezas.forEach(p => {
+    const ordenadas = [...piezas].sort((a, b) => (b.ancho * b.alto) - (a.ancho * a.alto));
+    ordenadas.forEach(p => {
       const fila = document.createElement('tr');
 
       const tdNombre = document.createElement('td');
@@ -220,6 +227,25 @@ export function obtenerFactorEscalaDXF() {
   if (val === 'cm') return 10;
   if (val === 'in') return 25.4;
   return null; // auto
+}
+
+/**
+ * Devuelve el margen configurado para los bordes de la plancha.
+ * Si "Personalizar por lado" está activo, devuelve los 4 valores individuales.
+ * Si no, aplica el margen general a los 4 lados.
+ * @returns {{arriba: number, derecha: number, abajo: number, izquierda: number}}
+ */
+export function obtenerMargen() {
+  if (refs.margenPersonalizado?.checked) {
+    return {
+      arriba:    parseFloat(refs.margenArriba.value)    || 0,
+      derecha:   parseFloat(refs.margenDerecha.value)   || 0,
+      abajo:     parseFloat(refs.margenAbajo.value)     || 0,
+      izquierda: parseFloat(refs.margenIzquierda.value) || 0
+    };
+  }
+  const g = parseFloat(refs.margenGeneral?.value) || 0;
+  return { arriba: g, derecha: g, abajo: g, izquierda: g };
 }
 
 // ===================== Modo de nesting (rectangular / irregular) =====================
@@ -735,6 +761,9 @@ export function reiniciarCanvas() {
  */
 export function mostrarSeccionExportar() {
   refs.seccionExportar.classList.remove('oculto');
+  // Resetear selección de formato al mostrar (nuevo resultado de nesting)
+  refs.exportarFormatos?.querySelectorAll('.btn-formato').forEach(b => b.classList.remove('activo'));
+  if (refs.btnDescargar) refs.btnDescargar.disabled = true;
 }
 
 // ===================== Modal de ayuda =====================
@@ -776,6 +805,20 @@ export function inicializarUI(callbacks) {
     limpiarFormularioPieza();
   });
 
+  refs.margenPersonalizado.addEventListener('change', () => {
+    if (refs.margenPersonalizado.checked) {
+      // Inicializar los campos individuales con el valor general actual
+      const g = parseFloat(refs.margenGeneral.value) || 0;
+      refs.margenArriba.value = g;
+      refs.margenDerecha.value = g;
+      refs.margenAbajo.value = g;
+      refs.margenIzquierda.value = g;
+      refs.margenLadosGrupo.classList.remove('oculto');
+    } else {
+      refs.margenLadosGrupo.classList.add('oculto');
+    }
+  });
+
   refs.btnImportar.addEventListener('click', () => {
     refs.inputArchivo.click();
   });
@@ -809,10 +852,17 @@ export function inicializarUI(callbacks) {
     callbacks.onDetenerIrregular();
   });
 
-  refs.btnExportarSVG.addEventListener('click', () => callbacks.onExportarSVG());
-  refs.btnExportarDXF.addEventListener('click', () => callbacks.onExportarDXF());
-  refs.btnExportarPDF.addEventListener('click', () => callbacks.onExportarPDF());
-  refs.btnExportarExcel.addEventListener('click', () => callbacks.onExportarExcel());
+  refs.exportarFormatos.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.btn-formato');
+    if (!btn) return;
+    refs.exportarFormatos.querySelectorAll('.btn-formato').forEach(b => b.classList.remove('activo'));
+    btn.classList.add('activo');
+    refs.btnDescargar.disabled = false;
+  });
+  refs.btnDescargar.addEventListener('click', () => {
+    const activo = refs.exportarFormatos.querySelector('.btn-formato.activo');
+    if (activo) callbacks.onDescargar(activo.dataset.formato);
+  });
 
   refs.btnAyuda.addEventListener('click', abrirModalAyuda);
   refs.btnCerrarAyuda.addEventListener('click', cerrarModalAyuda);
