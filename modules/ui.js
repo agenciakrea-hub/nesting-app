@@ -137,7 +137,7 @@ export function renderizarPiezas(piezas, onEliminar) {
       tdCantidad.textContent = p.cantidad;
 
       const tdMedidas = document.createElement('td');
-      tdMedidas.textContent = `${p.ancho} x ${p.alto}`;
+      tdMedidas.textContent = `${p.ancho} × ${p.alto} mm`;
 
       const tdMaterial = document.createElement('td');
       tdMaterial.textContent = p.material || '—';
